@@ -1,0 +1,22 @@
+services:
+  valhalla:
+    image: ghcr.io/nilsnolde/docker-valhalla/valhalla:latest
+    container_name: open-nav-valhalla
+    ports:
+      - "8002:8002"
+    environment:
+      use_tiles_ignore_pbf: "False"
+      serve_tiles: "True"
+      build_elevation: "False"
+      build_admins: "False"
+      tile_urls: "https://download.geofabrik.de/north-america/us/northeast-latest.osm.pbf"
+    volumes:
+      - ./infra/valhalla:/custom_files
+    restart: unless-stopped
+
+  photon:
+    image: rtuszik/photon:latest
+    container_name: open-nav-photon
+    ports:
+      - "2322:2322"
+    restart: unless-stopped
