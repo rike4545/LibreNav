@@ -30,6 +30,14 @@ export type RouteManeuver = {
   instruction: string;
   distanceKm: number;
   timeMin?: number;
+  coordinate?: Coordinate;
+};
+
+export type UserPosition = {
+  coordinate: Coordinate;
+  heading: number | null;
+  speedKmh: number;
+  accuracyM?: number;
 };
 
 export type RouteAlternative = {

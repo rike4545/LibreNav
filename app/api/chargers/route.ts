@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
   }
 
   const payload = (await response.json()) as { elements?: OverpassElement[] };
-  const results: ChargerSite[] = (payload.elements ?? [])
+  const results = (payload.elements ?? [])
     .map((element) => {
       const point = element.center ?? (typeof element.lat === 'number' && typeof element.lon === 'number' ? { lat: element.lat, lon: element.lon } : null);
       if (!point) return null;
@@ -78,10 +78,10 @@ export async function GET(request: NextRequest) {
         powerKw: tags['socket:output'] ? Number.parseInt(tags['socket:output'], 10) || null : null,
         coordinate: { lat: point.lat, lng: point.lon },
         address: address || undefined
-      } satisfies ChargerSite;
+      };
     })
-    .filter((value): value is ChargerSite => value !== null)
-    .slice(0, 100);
+    .filter((value) => value !== null)
+    .slice(0, 100) as ChargerSite[];
 
   return NextResponse.json({ results });
 }

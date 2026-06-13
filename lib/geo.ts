@@ -1,4 +1,4 @@
-import { Coordinate } from '@/types/map';
+import { Coordinate, UserPosition } from '@/types/map';
 
 export async function getCurrentPosition(): Promise<Coordinate | null> {
   if (typeof window === 'undefined' || !('geolocation' in navigator)) {
@@ -21,4 +21,23 @@ export async function getCurrentPosition(): Promise<Coordinate | null> {
       }
     );
   });
+}
+
+export function watchUserPosition(callback: (position: UserPosition) => void): () => void {
+  if (typeof window === 'undefined' || !('geolocation' in navigator)) return () => {};
+
+  const id = navigator.geolocation.watchPosition(
+    (pos) => {
+      callback({
+        coordinate: { lat: pos.coords.latitude, lng: pos.coords.longitude },
+        heading: pos.coords.heading,
+        speedKmh: (pos.coords.speed ?? 0) * 3.6,
+        accuracyM: pos.coords.accuracy
+      });
+    },
+    () => {},
+    { enableHighAccuracy: true, maximumAge: 3_000 }
+  );
+
+  return () => navigator.geolocation.clearWatch(id);
 }

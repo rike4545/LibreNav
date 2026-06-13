@@ -70,9 +70,9 @@ function normalizeFeed(payload: unknown, sourceUrl: string): Incident[] {
         coordinate: { lat, lng },
         updatedAt: String(record.updatedAt ?? record.updated_at ?? new Date().toISOString()),
         description: typeof record.description === 'string' ? record.description : undefined
-      } satisfies Incident;
+      };
     })
-    .filter((value): value is Incident => value !== null);
+    .filter((value) => value !== null) as Incident[];
 }
 
 function asNumber(value: unknown) {

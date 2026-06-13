@@ -37,6 +37,7 @@ type ValhallaTrip = {
       time?: number;
       toll?: boolean;
       ferry?: boolean;
+      begin_shape_index?: number;
     }>;
   }>;
 };
@@ -97,7 +98,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'No route geometry returned' }, { status: 502 });
   }
 
-  const geometry = polylineToFeature(primaryLeg.shape);
+  const coords = decodePolyline6(primaryLeg.shape);
+  const geometry = coordinatesToFeature(coords);
   const result: RouteResponse = {
     geometry,
     summary: {
@@ -107,11 +109,16 @@ export async function POST(request: NextRequest) {
       hasFerry: Boolean(primaryLeg.summary?.has_ferry || primaryLeg.maneuvers?.some((maneuver) => maneuver.ferry)),
       estimatedArrivalSoc: null
     },
-    maneuvers: (primaryLeg.maneuvers ?? []).map((maneuver) => ({
-      instruction: maneuver.instruction ?? 'Continue',
-      distanceKm: maneuver.length ?? 0,
-      timeMin: (maneuver.time ?? 0) / 60
-    })),
+    maneuvers: (primaryLeg.maneuvers ?? []).map((maneuver) => {
+      const shapeIdx = maneuver.begin_shape_index ?? 0;
+      const coord = coords[shapeIdx];
+      return {
+        instruction: maneuver.instruction ?? 'Continue',
+        distanceKm: maneuver.length ?? 0,
+        timeMin: (maneuver.time ?? 0) / 60,
+        coordinate: coord ? { lng: coord[0], lat: coord[1] } : undefined
+      };
+    }),
     alternatives: (payload.alternates ?? [])
       .map((alternate, index) => {
         const leg = alternate.trip?.legs?.[0];
@@ -121,7 +128,7 @@ export async function POST(request: NextRequest) {
           label: `Alt ${index + 1}`,
           distanceKm: leg.summary?.length ?? 0,
           durationMin: (leg.summary?.time ?? 0) / 60,
-          geometry: polylineToFeature(leg.shape)
+          geometry: coordinatesToFeature(decodePolyline6(leg.shape))
         };
       })
       .filter((value): value is RouteResponse['alternatives'][number] => value !== null)
@@ -130,15 +137,8 @@ export async function POST(request: NextRequest) {
   return NextResponse.json(result);
 }
 
-function polylineToFeature(shape: string): GeoJSON.Feature<GeoJSON.LineString> {
-  return {
-    type: 'Feature',
-    properties: {},
-    geometry: {
-      type: 'LineString',
-      coordinates: decodePolyline6(shape)
-    }
-  };
+function coordinatesToFeature(coordinates: [number, number][]): GeoJSON.Feature<GeoJSON.LineString> {
+  return { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates } };
 }
 
 function decodePolyline6(input: string): [number, number][] {
