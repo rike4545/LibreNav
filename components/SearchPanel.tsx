@@ -1,116 +1,445 @@
 'use client';
 
-import { ReactNode, useMemo, useState } from 'react';
-import useSWR from 'swr';
-import { ChevronDown, Clock3, MapPinned, Search, Star } from 'lucide-react';
-import { Coordinate, RouteOptions, SearchFeature } from '@/types/map';
-import { cn } from '@/lib/utils';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ArrowDown,
+  ArrowUp,
+  Briefcase,
+  ChevronDown,
+  Clock3,
+  Coffee,
+  CreditCard,
+  Croissant,
+  Fuel,
+  Home,
+  Loader2,
+  MapPin,
+  ParkingSquare,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Star,
+  Toilet,
+  Trash2,
+  X,
+  Zap
+} from 'lucide-react';
+import { PLACE_CATEGORIES } from '@/lib/services/overpass';
+import { searchPlaces } from '@/lib/services/geocode';
+import { SavedPlace } from '@/lib/storage';
+import { bearingCompass } from '@/lib/format';
+import { cn, formatDistanceKm } from '@/lib/utils';
+import { Coordinate, Place, PlaceCategoryId, RouteOptions, SearchFeature, Waypoint } from '@/types/map';
 
 type Props = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  origin: Coordinate | null;
-  destination: SearchFeature | null;
+  anchor: Coordinate | null;
+  waypoints: Waypoint[];
+  saved: SavedPlace[];
   recents: SearchFeature[];
-  favorites: SearchFeature[];
   options: RouteOptions;
+  imperial: boolean;
+  categoryLoading: PlaceCategoryId | null;
+  categoryResults: Place[];
+  activeCategory: PlaceCategoryId | null;
+  hasRoute: boolean;
   onOptionsChange: (options: RouteOptions) => void;
-  onSelect: (feature: SearchFeature) => Promise<void>;
-  onFavoriteToggle: (feature: SearchFeature) => void;
+  onSetDestination: (feature: SearchFeature) => void;
+  onAddStop: (feature: SearchFeature) => void;
+  onRemoveWaypoint: (id: string) => void;
+  onMoveWaypoint: (id: string, direction: -1 | 1) => void;
+  onToggleSaved: (feature: SearchFeature) => void;
+  onSetRole: (id: string, role: 'home' | 'work' | null) => void;
+  onCategorySelect: (category: PlaceCategoryId | null, alongRoute: boolean) => void;
+  onClearRecents: () => void;
 };
 
-const fetcher = async (url: string) => {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error('Search failed');
-  return (await response.json()) as { results: SearchFeature[] };
+const CATEGORY_ICONS: Record<PlaceCategoryId, ReactNode> = {
+  fuel: <Fuel className="h-4 w-4" />,
+  charging: <Zap className="h-4 w-4" />,
+  food: <Croissant className="h-4 w-4" />,
+  coffee: <Coffee className="h-4 w-4" />,
+  parking: <ParkingSquare className="h-4 w-4" />,
+  toilets: <Toilet className="h-4 w-4" />,
+  hotel: <Home className="h-4 w-4" />,
+  atm: <CreditCard className="h-4 w-4" />
 };
 
-export function SearchPanel({ open, onOpenChange, origin, destination, recents, favorites, options, onOptionsChange, onSelect, onFavoriteToggle }: Props) {
+export function SearchPanel({
+  open,
+  onOpenChange,
+  anchor,
+  waypoints,
+  saved,
+  recents,
+  options,
+  imperial,
+  categoryLoading,
+  categoryResults,
+  activeCategory,
+  hasRoute,
+  onOptionsChange,
+  onSetDestination,
+  onAddStop,
+  onRemoveWaypoint,
+  onMoveWaypoint,
+  onToggleSaved,
+  onSetRole,
+  onCategorySelect,
+  onClearRecents
+}: Props) {
   const [query, setQuery] = useState('');
-  const searchUrl = query.trim().length >= 2 ? `/api/geocode?q=${encodeURIComponent(query.trim())}` : null;
-  const { data, isLoading } = useSWR(searchUrl, fetcher);
-  const favoriteIds = useMemo(() => new Set(favorites.map((item) => item.id)), [favorites]);
+  const [results, setResults] = useState<SearchFeature[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [showOptions, setShowOptions] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+
+  // Debounced autocomplete. Each keystroke aborts the in-flight request so a
+  // slow response can't overwrite results for a newer query.
+  useEffect(() => {
+    const trimmed = query.trim();
+    if (trimmed.length < 2) {
+      setResults([]);
+      setSearching(false);
+      setError(null);
+      abortRef.current?.abort();
+      return;
+    }
+
+    setSearching(true);
+    const timer = setTimeout(() => {
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      searchPlaces(trimmed, { near: anchor, signal: controller.signal })
+        .then((found) => {
+          setResults(found);
+          setError(found.length ? null : 'No matches found.');
+        })
+        .catch((cause: Error) => {
+          if (cause.name === 'AbortError') return;
+          setError('Search is unavailable right now.');
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearching(false);
+        });
+    }, 280);
+
+    return () => clearTimeout(timer);
+  }, [query, anchor]);
+
+  const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
+  const home = saved.find((item) => item.role === 'home');
+  const work = saved.find((item) => item.role === 'work');
+
+  function choose(feature: SearchFeature, asStop: boolean) {
+    if (asStop) onAddStop(feature);
+    else onSetDestination(feature);
+    setQuery('');
+    setResults([]);
+  }
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-border bg-slate-900/92 shadow-panel backdrop-blur">
-      <button
-        type="button"
-        onClick={() => onOpenChange(!open)}
-        className="flex w-full items-center justify-between px-5 py-4 text-left"
-      >
-        <div>
-          <div className="text-xs uppercase tracking-[0.24em] text-slate-400">Search</div>
-          <div className="mt-1 text-lg font-semibold text-white">OpenStreetMap routing</div>
-        </div>
-        <ChevronDown className={cn('h-5 w-5 text-slate-400 transition', open && 'rotate-180')} />
-      </button>
+    <div className="overflow-hidden rounded-3xl border border-border bg-slate-900/95 shadow-panel backdrop-blur">
+      <div className="flex items-center gap-2 px-4 py-3">
+        <Search className="h-4 w-4 shrink-0 text-slate-400" />
+        <input
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          onFocus={() => onOpenChange(true)}
+          placeholder="Search places, addresses, or coordinates"
+          aria-label="Search for a destination"
+          className="w-full border-0 bg-transparent text-base text-slate-100 outline-none placeholder:text-slate-500"
+        />
+        {searching ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sky-400" /> : null}
+        {query ? (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Clear search"
+            className="shrink-0 rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => onOpenChange(!open)}
+            aria-label={open ? 'Collapse panel' : 'Expand panel'}
+            className="shrink-0 rounded-full p-1 text-slate-400 hover:bg-slate-800"
+          >
+            <ChevronDown className={cn('h-4 w-4 transition', open && 'rotate-180')} />
+          </button>
+        )}
+      </div>
 
-      {open ? (
-        <div className="border-t border-border px-5 py-4">
-          <div className="flex items-center gap-3 rounded-2xl border border-border bg-slate-800/90 px-4 py-3">
-            <Search className="h-4 w-4 text-slate-400" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search a place or address"
-              className="w-full border-0 bg-transparent text-base text-slate-100 outline-none placeholder:text-slate-500"
-            />
-          </div>
-
-          <div className="mt-4 rounded-2xl bg-slate-800/60 p-3 text-sm text-slate-300">
-            <div>Origin: {origin ? `${origin.lat.toFixed(4)}, ${origin.lng.toFixed(4)}` : 'Waiting for GPS'}</div>
-            <div className="mt-1">Destination: {destination?.name ?? 'None selected'}</div>
-          </div>
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <OptionChip label="Avoid tolls" active={options.avoidTolls} onClick={() => onOptionsChange({ ...options, avoidTolls: !options.avoidTolls })} />
-            <OptionChip label="Avoid highways" active={options.avoidHighways} onClick={() => onOptionsChange({ ...options, avoidHighways: !options.avoidHighways })} />
-            <OptionChip label="Avoid ferries" active={options.avoidFerries} onClick={() => onOptionsChange({ ...options, avoidFerries: !options.avoidFerries })} />
-            <OptionChip label="Prefer twisty" active={options.preferTwisty} onClick={() => onOptionsChange({ ...options, preferTwisty: !options.preferTwisty })} />
-            <OptionChip label="Alternatives" active={options.alternatives} onClick={() => onOptionsChange({ ...options, alternatives: !options.alternatives })} />
-          </div>
-
-          <div className="mt-4 space-y-2">
-            {isLoading ? <div className="text-sm text-slate-400">Searching…</div> : null}
-            {data?.results?.map((feature) => (
-              <div
-                key={feature.id}
-                className="flex items-start justify-between rounded-2xl border border-border bg-slate-800/70 px-4 py-3 transition hover:bg-slate-700/80"
-              >
-                <button type="button" onClick={() => void onSelect(feature)} className="flex-1 text-left">
-                  <div className="text-sm font-semibold text-white">{feature.name}</div>
-                  <div className="mt-1 text-xs text-slate-400">{feature.label}</div>
-                </button>
+      {results.length ? (
+        <div className="max-h-72 overflow-y-auto border-t border-border">
+          {results.map((feature) => (
+            <div key={feature.id} className="flex items-center gap-1 border-b border-border/50 px-2 py-1 last:border-0 hover:bg-slate-800/60">
+              <button type="button" onClick={() => choose(feature, false)} className="flex min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left">
+                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-white">{feature.name}</div>
+                  <div className="truncate text-xs text-slate-400">
+                    {feature.label}
+                    {anchor ? ` · ${bearingCompass(anchor, feature.coordinate, imperial)}` : ''}
+                  </div>
+                </div>
+              </button>
+              {waypoints.length > 0 ? (
                 <button
                   type="button"
-                  onClick={() => onFavoriteToggle(feature)}
-                  className="rounded-full p-2 text-slate-400 transition hover:bg-slate-700 hover:text-yellow-300"
-                  aria-label="Toggle favorite"
+                  onClick={() => choose(feature, true)}
+                  title="Add as a stop"
+                  aria-label={`Add ${feature.name} as a stop`}
+                  className="shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-700 hover:text-amber-300"
                 >
-                  <Star className={cn('h-4 w-4', favoriteIds.has(feature.id) && 'fill-current text-yellow-300')} />
+                  <Plus className="h-4 w-4" />
                 </button>
-              </div>
+              ) : null}
+              <button
+                type="button"
+                onClick={() => onToggleSaved(feature)}
+                aria-label={`${savedIds.has(feature.id) ? 'Unsave' : 'Save'} ${feature.name}`}
+                className="shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-700 hover:text-yellow-300"
+              >
+                <Star className={cn('h-4 w-4', savedIds.has(feature.id) && 'fill-current text-yellow-300')} />
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {error && query.trim().length >= 2 && !searching && !results.length ? (
+        <div className="border-t border-border px-4 py-3 text-sm text-slate-400">{error}</div>
+      ) : null}
+
+      {open ? (
+        <div className="max-h-[min(60vh,34rem)] overflow-y-auto border-t border-border px-4 py-3">
+          <div className="flex flex-wrap gap-1.5">
+            {PLACE_CATEGORIES.map((category) => (
+              <button
+                key={category.id}
+                type="button"
+                onClick={() => onCategorySelect(activeCategory === category.id ? null : category.id, false)}
+                className={cn(
+                  'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+                  activeCategory === category.id
+                    ? 'border-purple-400 bg-purple-500/25 text-purple-100'
+                    : 'border-border bg-slate-800/70 text-slate-300 hover:bg-slate-700'
+                )}
+              >
+                {categoryLoading === category.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : CATEGORY_ICONS[category.id]}
+                {category.label}
+              </button>
             ))}
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2">
-            <PanelList title="Favorites" icon={<Star className="h-4 w-4" />} items={favorites} onSelect={onSelect} />
-            <PanelList title="Recents" icon={<Clock3 className="h-4 w-4" />} items={recents} onSelect={onSelect} />
-          </div>
+          {activeCategory && hasRoute ? (
+            <button
+              type="button"
+              onClick={() => onCategorySelect(activeCategory, true)}
+              className="mt-2 w-full rounded-xl border border-purple-400/30 bg-purple-500/10 px-3 py-2 text-xs font-semibold text-purple-100 transition hover:bg-purple-500/20"
+            >
+              Search along the whole route instead
+            </button>
+          ) : null}
+
+          {activeCategory && categoryResults.length ? (
+            <div className="mt-3 space-y-1.5">
+              {categoryResults.slice(0, 12).map((place) => (
+                <div key={place.id} className="flex items-center gap-1 rounded-xl bg-slate-800/60 hover:bg-slate-800">
+                  <button
+                    type="button"
+                    onClick={() => choose({ id: place.id, name: place.name, label: place.address ?? '', coordinate: place.coordinate }, false)}
+                    className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left"
+                  >
+                    <span className="text-purple-300">{CATEGORY_ICONS[place.category]}</span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm text-white">{place.name}</span>
+                      {place.address ? <span className="block truncate text-xs text-slate-400">{place.address}</span> : null}
+                    </span>
+                    {place.distanceKm !== undefined ? (
+                      <span className="shrink-0 text-xs tabular-nums text-slate-400">{formatDistanceKm(place.distanceKm, imperial)}</span>
+                    ) : null}
+                  </button>
+                  {waypoints.length > 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => choose({ id: place.id, name: place.name, label: place.address ?? '', coordinate: place.coordinate }, true)}
+                      aria-label={`Add ${place.name} as a stop`}
+                      className="shrink-0 rounded-full p-2 text-slate-400 hover:bg-slate-700 hover:text-amber-300"
+                    >
+                      <Plus className="h-4 w-4" />
+                    </button>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          ) : null}
+
+          {waypoints.length > 0 ? (
+            <section className="mt-4">
+              <SectionHeading>
+                Trip ({waypoints.length} {waypoints.length === 1 ? 'stop' : 'stops'})
+              </SectionHeading>
+              <div className="mt-2 space-y-1.5">
+                {waypoints.map((waypoint, index) => (
+                  <div key={waypoint.id} className="flex items-center gap-2 rounded-xl bg-slate-800/60 px-3 py-2">
+                    <span
+                      className={cn(
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-slate-950',
+                        index === 0 ? 'bg-emerald-400' : index === waypoints.length - 1 ? 'bg-sky-400' : 'bg-amber-400'
+                      )}
+                    >
+                      {index === 0 ? 'A' : index === waypoints.length - 1 ? 'B' : index}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm text-white">{waypoint.name}</div>
+                      <div className="truncate text-xs text-slate-500">{waypoint.label}</div>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => onMoveWaypoint(waypoint.id, -1)}
+                      aria-label={`Move ${waypoint.name} earlier`}
+                      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 disabled:opacity-25"
+                    >
+                      <ArrowUp className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === waypoints.length - 1}
+                      onClick={() => onMoveWaypoint(waypoint.id, 1)}
+                      aria-label={`Move ${waypoint.name} later`}
+                      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 disabled:opacity-25"
+                    >
+                      <ArrowDown className="h-3.5 w-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onRemoveWaypoint(waypoint.id)}
+                      aria-label={`Remove ${waypoint.name}`}
+                      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-rose-300"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          <section className="mt-4">
+            <button
+              type="button"
+              onClick={() => setShowOptions((value) => !value)}
+              className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-200"
+            >
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="h-3.5 w-3.5" />
+                Route preferences
+              </span>
+              <ChevronDown className={cn('h-4 w-4 transition', showOptions && 'rotate-180')} />
+            </button>
+            {showOptions ? (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                <Chip label="Avoid tolls" active={options.avoidTolls} onClick={() => onOptionsChange({ ...options, avoidTolls: !options.avoidTolls })} />
+                <Chip label="Avoid highways" active={options.avoidHighways} onClick={() => onOptionsChange({ ...options, avoidHighways: !options.avoidHighways })} />
+                <Chip label="Avoid ferries" active={options.avoidFerries} onClick={() => onOptionsChange({ ...options, avoidFerries: !options.avoidFerries })} />
+                <Chip label="Scenic roads" active={options.preferTwisty} onClick={() => onOptionsChange({ ...options, preferTwisty: !options.preferTwisty })} />
+                <Chip label="Show alternates" active={options.alternatives} onClick={() => onOptionsChange({ ...options, alternatives: !options.alternatives })} />
+              </div>
+            ) : null}
+          </section>
+
+          {home || work ? (
+            <section className="mt-4 grid grid-cols-2 gap-2">
+              {home ? <RoleButton icon={<Home className="h-4 w-4" />} place={home} onClick={() => onSetDestination(home)} /> : <div />}
+              {work ? <RoleButton icon={<Briefcase className="h-4 w-4" />} place={work} onClick={() => onSetDestination(work)} /> : null}
+            </section>
+          ) : null}
+
+          <section className="mt-4">
+            <SectionHeading>Saved places</SectionHeading>
+            <PlaceList
+              items={saved}
+              empty="Tap the star on any result to save it."
+              imperial={imperial}
+              anchor={anchor}
+              onSelect={onSetDestination}
+              renderExtra={(place) => (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => onSetRole(place.id, (place as SavedPlace).role === 'home' ? null : 'home')}
+                    aria-label={`Set ${place.name} as home`}
+                    className={cn('rounded p-1.5 hover:bg-slate-700', (place as SavedPlace).role === 'home' ? 'text-emerald-300' : 'text-slate-500')}
+                  >
+                    <Home className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onSetRole(place.id, (place as SavedPlace).role === 'work' ? null : 'work')}
+                    aria-label={`Set ${place.name} as work`}
+                    className={cn('rounded p-1.5 hover:bg-slate-700', (place as SavedPlace).role === 'work' ? 'text-sky-300' : 'text-slate-500')}
+                  >
+                    <Briefcase className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onToggleSaved(place)}
+                    aria-label={`Remove ${place.name}`}
+                    className="rounded p-1.5 text-slate-500 hover:bg-slate-700 hover:text-rose-300"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </>
+              )}
+            />
+          </section>
+
+          <section className="mt-4">
+            <div className="flex items-center justify-between">
+              <SectionHeading>Recent</SectionHeading>
+              {recents.length ? (
+                <button type="button" onClick={onClearRecents} className="text-xs text-slate-500 hover:text-slate-300">
+                  Clear
+                </button>
+              ) : null}
+            </div>
+            <PlaceList
+              items={recents}
+              empty="Destinations you pick show up here."
+              imperial={imperial}
+              anchor={anchor}
+              onSelect={onSetDestination}
+              icon={<Clock3 className="h-4 w-4 shrink-0 text-slate-500" />}
+            />
+          </section>
         </div>
       ) : null}
     </div>
   );
 }
 
-function OptionChip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function SectionHeading({ children }: { children: ReactNode }) {
+  return <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{children}</div>;
+}
+
+function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        'rounded-full border px-3 py-2 text-xs font-semibold transition',
-        active ? 'border-sky-400 bg-sky-500/20 text-sky-100' : 'border-border bg-slate-800/60 text-slate-300 hover:bg-slate-700/70'
+        'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+        active ? 'border-sky-400 bg-sky-500/25 text-sky-100' : 'border-border bg-slate-800/70 text-slate-300 hover:bg-slate-700'
       )}
     >
       {label}
@@ -118,33 +447,60 @@ function OptionChip({ label, active, onClick }: { label: string; active: boolean
   );
 }
 
-function PanelList({ title, icon, items, onSelect }: { title: string; icon: ReactNode; items: SearchFeature[]; onSelect: (feature: SearchFeature) => Promise<void> }) {
+function RoleButton({ icon, place, onClick }: { icon: ReactNode; place: SavedPlace; onClick: () => void }) {
   return (
-    <div className="rounded-2xl border border-border bg-slate-800/50 p-3">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
-        {icon}
-        {title}
-      </div>
-      <div className="space-y-2">
-        {items.length === 0 ? (
-          <div className="rounded-xl bg-slate-900/50 px-3 py-2 text-xs text-slate-500">No saved places yet.</div>
-        ) : (
-          items.slice(0, 5).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => void onSelect(item)}
-              className="flex w-full items-start gap-2 rounded-xl px-2 py-2 text-left transition hover:bg-slate-700/50"
-            >
-              <MapPinned className="mt-0.5 h-4 w-4 text-sky-400" />
-              <div>
-                <div className="text-sm text-slate-100">{item.name}</div>
-                <div className="text-xs text-slate-500">{item.label}</div>
-              </div>
-            </button>
-          ))
-        )}
-      </div>
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center gap-2 rounded-xl border border-border bg-slate-800/70 px-3 py-2.5 text-left transition hover:bg-slate-700"
+    >
+      <span className="text-sky-300">{icon}</span>
+      <span className="min-w-0">
+        <span className="block truncate text-sm font-medium text-white">{place.name}</span>
+        <span className="block text-[11px] uppercase tracking-wider text-slate-500">{place.role}</span>
+      </span>
+    </button>
+  );
+}
+
+function PlaceList({
+  items,
+  empty,
+  anchor,
+  imperial,
+  onSelect,
+  renderExtra,
+  icon
+}: {
+  items: SearchFeature[];
+  empty: string;
+  anchor: Coordinate | null;
+  imperial: boolean;
+  onSelect: (feature: SearchFeature) => void;
+  renderExtra?: (item: SearchFeature) => ReactNode;
+  icon?: ReactNode;
+}) {
+  if (!items.length) {
+    return <div className="mt-2 rounded-xl bg-slate-800/40 px-3 py-2.5 text-xs text-slate-500">{empty}</div>;
+  }
+
+  return (
+    <div className="mt-2 space-y-1">
+      {items.slice(0, 8).map((item) => (
+        <div key={item.id} className="flex items-center gap-1 rounded-xl hover:bg-slate-800/70">
+          <button type="button" onClick={() => onSelect(item)} className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left">
+            {icon ?? <Star className="h-4 w-4 shrink-0 fill-current text-yellow-400/80" />}
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm text-white">{item.name}</span>
+              <span className="block truncate text-xs text-slate-500">
+                {item.label}
+                {anchor ? ` · ${bearingCompass(anchor, item.coordinate, imperial)}` : ''}
+              </span>
+            </span>
+          </button>
+          {renderExtra ? <div className="flex shrink-0 items-center pr-1">{renderExtra(item)}</div> : null}
+        </div>
+      ))}
     </div>
   );
 }

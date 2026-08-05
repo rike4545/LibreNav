@@ -1,16 +1,45 @@
-import { HazardReport, RouteOptions, SearchFeature } from '@/types/map';
+import { DEFAULT_VEHICLE } from '@/lib/config';
+import { HazardReport, RouteOptions, SearchFeature, VehicleProfile } from '@/types/map';
 
-const RECENTS_KEY = 'open-nav.recents';
-const FAVORITES_KEY = 'open-nav.favorites';
-const REPORTS_KEY = 'open-nav.reports';
-const OPTIONS_KEY = 'open-nav.options';
+const RECENTS_KEY = 'librenav.recents';
+const FAVORITES_KEY = 'librenav.favorites';
+const REPORTS_KEY = 'librenav.reports';
+const OPTIONS_KEY = 'librenav.options';
+const PREFS_KEY = 'librenav.prefs';
+const VEHICLE_KEY = 'librenav.vehicle';
 
-const defaultRouteOptions: RouteOptions = {
+export type SavedPlace = SearchFeature & {
+  /** 'home' and 'work' are pinned; everything else is a plain favorite. */
+  role?: 'home' | 'work';
+  savedAt: string;
+};
+
+export type Preferences = {
+  imperial: boolean;
+  voiceGuidance: boolean;
+  mapStyleId: string;
+  showChargers: boolean;
+  showIncidents: boolean;
+  /** Minimum charger power in kW to display. 0 shows everything. */
+  minChargerKw: number;
+};
+
+export const defaultRouteOptions: RouteOptions = {
   avoidTolls: false,
   avoidHighways: false,
   avoidFerries: false,
   preferTwisty: false,
   alternatives: true
+};
+
+export const defaultPreferences: Preferences = {
+  // Follow the locale's convention rather than assuming metric.
+  imperial: typeof navigator !== 'undefined' && /^en-(US|GB|MM|LR)/i.test(navigator.language ?? ''),
+  voiceGuidance: true,
+  mapStyleId: 'liberty',
+  showChargers: true,
+  showIncidents: true,
+  minChargerKw: 0
 };
 
 function safeRead<T>(key: string, fallback: T): T {
@@ -25,49 +54,99 @@ function safeRead<T>(key: string, fallback: T): T {
 
 function safeWrite<T>(key: string, value: T) {
   if (typeof window === 'undefined') return;
-  window.localStorage.setItem(key, JSON.stringify(value));
+  try {
+    window.localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Quota or private-mode failures shouldn't take the app down.
+  }
 }
 
-export function getRecents() {
+export function getRecents(): SearchFeature[] {
   return safeRead<SearchFeature[]>(RECENTS_KEY, []);
 }
 
-export function pushRecent(item: SearchFeature) {
-  const current = getRecents().filter((entry) => entry.id !== item.id);
-  safeWrite(RECENTS_KEY, [item, ...current].slice(0, 8));
+export function pushRecent(item: SearchFeature): SearchFeature[] {
+  const next = [item, ...getRecents().filter((entry) => entry.id !== item.id)].slice(0, 12);
+  safeWrite(RECENTS_KEY, next);
+  return next;
 }
 
-export function getFavorites() {
-  return safeRead<SearchFeature[]>(FAVORITES_KEY, []);
+export function clearRecents(): SearchFeature[] {
+  safeWrite(RECENTS_KEY, []);
+  return [];
 }
 
-export function toggleFavorite(item: SearchFeature) {
-  const current = getFavorites();
+export function getSavedPlaces(): SavedPlace[] {
+  return safeRead<SavedPlace[]>(FAVORITES_KEY, []);
+}
+
+export function toggleSavedPlace(item: SearchFeature): SavedPlace[] {
+  const current = getSavedPlaces();
   const exists = current.some((entry) => entry.id === item.id);
-  const next = exists ? current.filter((entry) => entry.id !== item.id) : [item, ...current].slice(0, 20);
+  const next = exists
+    ? current.filter((entry) => entry.id !== item.id)
+    : [{ ...item, savedAt: new Date().toISOString() }, ...current].slice(0, 60);
   safeWrite(FAVORITES_KEY, next);
   return next;
 }
 
-export function getReports() {
-  return safeRead<HazardReport[]>(REPORTS_KEY, []);
+export function renameSavedPlace(id: string, name: string): SavedPlace[] {
+  const next = getSavedPlaces().map((entry) => (entry.id === id ? { ...entry, name } : entry));
+  safeWrite(FAVORITES_KEY, next);
+  return next;
 }
 
-export function saveReport(report: HazardReport) {
-  const current = getReports();
-  const next = [report, ...current].slice(0, 200);
+/** Assign home/work. Only one place can hold each role. */
+export function setPlaceRole(id: string, role: 'home' | 'work' | null): SavedPlace[] {
+  const next = getSavedPlaces().map((entry) => {
+    if (entry.id === id) return { ...entry, role: role ?? undefined };
+    return entry.role === role ? { ...entry, role: undefined } : entry;
+  });
+  safeWrite(FAVORITES_KEY, next);
+  return next;
+}
+
+export function getReports(): HazardReport[] {
+  // Reports expire after a day — a stale hazard pin is worse than none.
+  const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+  return safeRead<HazardReport[]>(REPORTS_KEY, []).filter((report) => new Date(report.createdAt).getTime() > cutoff);
+}
+
+export function saveReport(report: HazardReport): HazardReport[] {
+  const next = [report, ...getReports()].slice(0, 200);
   safeWrite(REPORTS_KEY, next);
   return next;
 }
 
-export function getRouteOptions() {
-  return {
-    ...defaultRouteOptions,
-    ...safeRead<RouteOptions>(OPTIONS_KEY, defaultRouteOptions)
-  } satisfies RouteOptions;
+export function removeReport(id: string): HazardReport[] {
+  const next = getReports().filter((report) => report.id !== id);
+  safeWrite(REPORTS_KEY, next);
+  return next;
 }
 
-export function saveRouteOptions(options: RouteOptions) {
+export function getRouteOptions(): RouteOptions {
+  return { ...defaultRouteOptions, ...safeRead<Partial<RouteOptions>>(OPTIONS_KEY, {}) };
+}
+
+export function saveRouteOptions(options: RouteOptions): RouteOptions {
   safeWrite(OPTIONS_KEY, options);
   return options;
+}
+
+export function getPreferences(): Preferences {
+  return { ...defaultPreferences, ...safeRead<Partial<Preferences>>(PREFS_KEY, {}) };
+}
+
+export function savePreferences(preferences: Preferences): Preferences {
+  safeWrite(PREFS_KEY, preferences);
+  return preferences;
+}
+
+export function getVehicle(): VehicleProfile {
+  return { ...DEFAULT_VEHICLE, ...safeRead<Partial<VehicleProfile>>(VEHICLE_KEY, {}) };
+}
+
+export function saveVehicle(vehicle: VehicleProfile): VehicleProfile {
+  safeWrite(VEHICLE_KEY, vehicle);
+  return vehicle;
 }

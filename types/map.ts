@@ -8,6 +8,8 @@ export type SearchFeature = {
   name: string;
   label: string;
   coordinate: Coordinate;
+  /** OSM tag pair from Photon, e.g. amenity/cafe. Used for result icons. */
+  kind?: string;
 };
 
 export type RouteOptions = {
@@ -23,14 +25,57 @@ export type RouteSummary = {
   durationMin: number;
   hasToll: boolean;
   hasFerry: boolean;
-  estimatedArrivalSoc?: number | null;
+  hasHighway: boolean;
+};
+
+/**
+ * Valhalla maneuver types, narrowed to the shapes we draw icons for.
+ * Full list: https://valhalla.github.io/valhalla/api/turn-by-turn/api-reference/
+ */
+export type ManeuverKind =
+  | 'start'
+  | 'destination'
+  | 'continue'
+  | 'slight-left'
+  | 'left'
+  | 'sharp-left'
+  | 'slight-right'
+  | 'right'
+  | 'sharp-right'
+  | 'uturn'
+  | 'ramp-left'
+  | 'ramp-right'
+  | 'ramp-straight'
+  | 'exit-left'
+  | 'exit-right'
+  | 'merge'
+  | 'roundabout'
+  | 'ferry';
+
+export type ManeuverSign = {
+  exitNumbers: string[];
+  exitBranches: string[];
+  exitToward: string[];
 };
 
 export type RouteManeuver = {
+  kind: ManeuverKind;
   instruction: string;
+  /** Spoken form from Valhalla — shorter and cleaner than the display text. */
+  verbalInstruction?: string;
+  /** Announced once the maneuver completes ("Continue for 2 kilometers"). */
+  verbalPostInstruction?: string;
+  streetNames: string[];
   distanceKm: number;
-  timeMin?: number;
-  coordinate?: Coordinate;
+  timeMin: number;
+  /** Where the maneuver begins, resolved from begin_shape_index. */
+  coordinate: Coordinate;
+  /** Index into the route geometry where this maneuver starts. */
+  shapeIndex: number;
+  sign?: ManeuverSign;
+  roundaboutExit?: number;
+  /** Index of the leg (waypoint segment) this maneuver belongs to. */
+  legIndex: number;
 };
 
 export type UserPosition = {
@@ -40,18 +85,28 @@ export type UserPosition = {
   accuracyM?: number;
 };
 
+export type RouteLeg = {
+  distanceKm: number;
+  durationMin: number;
+  /** Index into the full route geometry where this leg starts. */
+  startShapeIndex: number;
+};
+
 export type RouteAlternative = {
   id: string;
   label: string;
   distanceKm: number;
   durationMin: number;
-  geometry: GeoJSON.Feature<GeoJSON.LineString>;
+  hasToll: boolean;
+  coordinates: [number, number][];
 };
 
 export type RouteResponse = {
-  geometry: GeoJSON.Feature<GeoJSON.LineString>;
+  /** Full decoded route geometry, [lng, lat] pairs. */
+  coordinates: [number, number][];
   summary: RouteSummary;
   maneuvers: RouteManeuver[];
+  legs: RouteLeg[];
   alternatives: RouteAlternative[];
 };
 
@@ -68,9 +123,29 @@ export type ChargerSite = {
   name: string;
   network: string;
   plugs: string[];
-  powerKw?: number | null;
+  powerKw: number | null;
   coordinate: Coordinate;
   address?: string;
+  /** OSM access tag — 'yes', 'customers', 'private', … */
+  access?: string;
+  fee?: string;
+  capacity?: number | null;
+  openingHours?: string;
+  website?: string;
+};
+
+export type PlaceCategoryId = 'fuel' | 'food' | 'coffee' | 'parking' | 'charging' | 'toilets' | 'hotel' | 'atm';
+
+export type Place = {
+  id: string;
+  name: string;
+  category: PlaceCategoryId;
+  coordinate: Coordinate;
+  address?: string;
+  brand?: string;
+  openingHours?: string;
+  /** Straight-line distance from the search anchor, filled in client-side. */
+  distanceKm?: number;
 };
 
 export type Incident = {
@@ -82,4 +157,25 @@ export type Incident = {
   coordinate: Coordinate;
   updatedAt: string;
   description?: string;
+};
+
+/** A stop in the trip. The first is the origin, the last is the destination. */
+export type Waypoint = {
+  id: string;
+  name: string;
+  label: string;
+  coordinate: Coordinate;
+  /** True when this stop tracks live GPS rather than a fixed point. */
+  isCurrentLocation?: boolean;
+};
+
+export type VehicleProfile = {
+  /** Usable battery in kWh. 0 disables range estimation. */
+  batteryKwh: number;
+  /** Average consumption in kWh per 100 km. */
+  consumptionKwh100km: number;
+  /** Current state of charge, 0–100. */
+  socPercent: number;
+  /** Charge the driver wants left on arrival, 0–100. */
+  reservePercent: number;
 };
