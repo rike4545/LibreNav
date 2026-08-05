@@ -18,8 +18,12 @@ type OverpassPayload = { elements?: OverpassElement[] };
  * returns 504 under load regularly enough that a single-endpoint client feels
  * broken to users.
  */
-/** Give up on a mirror after this long and try the next one. */
-const MIRROR_TIMEOUT_MS = 20_000;
+/**
+ * Give up on a mirror after this long and try the next one. Kept tight because
+ * the budget is cumulative — every mirror can be slow at once, and a driver
+ * waiting a full minute for charger pins has already given up.
+ */
+const MIRROR_TIMEOUT_MS = 12_000;
 
 async function runOverpass(query: string, signal?: AbortSignal): Promise<OverpassElement[]> {
   const configured = getEndpoints().overpassUrl;
@@ -71,6 +75,21 @@ function addressOf(tags: Record<string, string>): string | undefined {
 }
 
 /* ------------------------------------------------------------------ chargers */
+
+/** Connector labels offered as filter options, in the order shown. */
+export const CONNECTOR_OPTIONS = [
+  'CCS2',
+  'CCS',
+  'CCS1',
+  'Type 2',
+  'Type 2 (tethered)',
+  'Type 1',
+  'CHAdeMO',
+  'Supercharger',
+  'Supercharger CCS',
+  'Tesla Destination',
+  'Schuko'
+];
 
 const SOCKET_LABELS: Array<[string, string]> = [
   ['socket:type2', 'Type 2'],

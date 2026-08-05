@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import maplibregl, { GeoJSONSource, LngLatBoundsLike, Map, MapMouseEvent, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { MAP_STYLES, appEnv } from '@/lib/config';
+import { appEnv, resolveMapStyleUrl } from '@/lib/config';
 import { boundsOf } from '@/lib/geometry';
 import { ChargerSite, Coordinate, HazardReport, Place, RouteResponse, UserPosition, Waypoint } from '@/types/map';
 
@@ -341,10 +341,9 @@ export function NavMap({
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
 
-    const style = MAP_STYLES.find((item) => item.id === styleId) ?? MAP_STYLES[0];
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: style.url,
+      style: resolveMapStyleUrl(styleId),
       center: [center.lng, center.lat],
       zoom: appEnv.defaultZoom,
       attributionControl: false,
@@ -356,23 +355,45 @@ export function NavMap({
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 90, unit: 'metric' }), 'bottom-left');
 
-    map.on('load', () => {
-      styleReadyRef.current = true;
-      installLayers(map);
-    });
+    /**
+     * Not `isStyleLoaded()`: that stays false while tiles are still pending,
+     * even though the style spec is fully parsed and addSource/addLayer are
+     * already valid. Gating on it meant a map whose tiles were slow never got
+     * its overlays at all — no route line, no chargers. A parsed layer list is
+     * the accurate signal for "safe to add layers".
+     */
+    const styleParsed = () => {
+      try {
+        return (map.getStyle()?.layers?.length ?? 0) > 0;
+      } catch {
+        return false;
+      }
+    };
 
-    // A basemap swap wipes the style, so re-add our layers. installLayers is a
-    // no-op once they exist, but re-stacking on every styledata is what keeps
-    // the route visible while the basemap streams in its remaining layers.
-    map.on('styledata', () => {
-      if (!map.isStyleLoaded()) return;
+    const applyOverlays = () => {
+      if (!styleParsed()) return false;
+      styleReadyRef.current = true;
       installLayers(map);
       raiseOverlays(map);
       syncOverlayData(map);
-    });
+      return true;
+    };
 
-    // Last word on stacking: nothing else loads after idle.
+    // 'load' waits for the first full render, which never arrives if tiles
+    // stall, so back the events with a poll that stops once we're installed.
+    map.on('load', applyOverlays);
+    map.on('styledata', applyOverlays);
     map.on('idle', () => raiseOverlays(map));
+
+    let installPoll: ReturnType<typeof setInterval> | undefined;
+    if (!applyOverlays()) {
+      installPoll = setInterval(() => {
+        if (applyOverlays()) {
+          clearInterval(installPoll);
+          installPoll = undefined;
+        }
+      }, 200);
+    }
 
     map.on('moveend', () => {
       const next = map.getCenter();
@@ -409,6 +430,7 @@ export function NavMap({
 
     return () => {
       clearPress();
+      if (installPoll) clearInterval(installPoll);
       observer.disconnect();
       map.remove();
       mapRef.current = null;
@@ -422,8 +444,7 @@ export function NavMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !styleReadyRef.current) return;
-    const style = MAP_STYLES.find((item) => item.id === styleId);
-    if (style) map.setStyle(style.url, { diff: false });
+    map.setStyle(resolveMapStyleUrl(styleId), { diff: false });
   }, [styleId]);
 
   /* --------------------------------------------- overlay data -> sources */

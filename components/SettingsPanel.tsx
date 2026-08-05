@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { BatteryCharging, Globe, RotateCcw, Server, X } from 'lucide-react';
 import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, resetEndpoints, saveEndpoints } from '@/lib/config';
+import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
 import { Preferences } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { VehicleProfile } from '@/types/map';
@@ -10,12 +11,14 @@ import { VehicleProfile } from '@/types/map';
 type Props = {
   preferences: Preferences;
   vehicle: VehicleProfile;
+  /** Networks seen in the currently loaded chargers. */
+  chargerNetworks: string[];
   onPreferencesChange: (preferences: Preferences) => void;
   onVehicleChange: (vehicle: VehicleProfile) => void;
   onClose: () => void;
 };
 
-export function SettingsPanel({ preferences, vehicle, onPreferencesChange, onVehicleChange, onClose }: Props) {
+export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPreferencesChange, onVehicleChange, onClose }: Props) {
   const [endpoints, setEndpoints] = useState<Endpoints>(() => getEndpoints());
   const [saved, setSaved] = useState(false);
 
@@ -59,12 +62,6 @@ export function SettingsPanel({ preferences, vehicle, onPreferencesChange, onVeh
             checked={preferences.showChargers}
             onChange={(value) => onPreferencesChange({ ...preferences, showChargers: value })}
           />
-          <Toggle
-            label="Show incidents"
-            checked={preferences.showIncidents}
-            onChange={(value) => onPreferencesChange({ ...preferences, showIncidents: value })}
-          />
-
           <div className="mt-3">
             <div className="text-xs font-medium text-slate-300">Map style</div>
             <div className="mt-2 flex flex-wrap gap-1.5">
@@ -95,6 +92,26 @@ export function SettingsPanel({ preferences, vehicle, onPreferencesChange, onVeh
             step={25}
             onChange={(value) => onPreferencesChange({ ...preferences, minChargerKw: value })}
           />
+
+          <SelectField
+            label="Connector"
+            value={preferences.chargerConnector}
+            options={CONNECTOR_OPTIONS}
+            allLabel="Any connector"
+            onChange={(value) => onPreferencesChange({ ...preferences, chargerConnector: value })}
+          />
+
+          <SelectField
+            label="Network"
+            value={preferences.chargerNetwork}
+            options={chargerNetworks}
+            allLabel={chargerNetworks.length ? 'Any network' : 'No networks loaded yet'}
+            onChange={(value) => onPreferencesChange({ ...preferences, chargerNetwork: value })}
+          />
+          <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+            Connector and network come from OpenStreetMap tags, which are often missing — filtering will hide chargers
+            that simply have not been tagged.
+          </p>
         </Section>
 
         <Section title="Vehicle" icon={<BatteryCharging className="h-4 w-4" />}>
@@ -118,6 +135,12 @@ export function SettingsPanel({ preferences, vehicle, onPreferencesChange, onVeh
           <TextField label="Valhalla (routing)" value={endpoints.valhallaUrl} placeholder={DEFAULT_ENDPOINTS.valhallaUrl} onChange={(v) => setEndpoints({ ...endpoints, valhallaUrl: v })} />
           <TextField label="Photon (search)" value={endpoints.photonUrl} placeholder={DEFAULT_ENDPOINTS.photonUrl} onChange={(v) => setEndpoints({ ...endpoints, photonUrl: v })} />
           <TextField label="Overpass (map data)" value={endpoints.overpassUrl} placeholder={DEFAULT_ENDPOINTS.overpassUrl} onChange={(v) => setEndpoints({ ...endpoints, overpassUrl: v })} />
+          <TextField
+            label="Basemap style URL (overrides the picker)"
+            value={endpoints.mapStyleUrl}
+            placeholder={DEFAULT_ENDPOINTS.mapStyleUrl}
+            onChange={(v) => setEndpoints({ ...endpoints, mapStyleUrl: v })}
+          />
 
           <div className="mt-3 flex items-center gap-2">
             <button type="button" onClick={applyEndpoints} className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400">
@@ -212,6 +235,39 @@ function NumberField({
         />
         <span className="w-20 text-xs text-slate-500">{suffix}</span>
       </span>
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  allLabel,
+  onChange
+}: {
+  label: string;
+  value: string | null;
+  options: string[];
+  allLabel: string;
+  onChange: (value: string | null) => void;
+}) {
+  return (
+    <label className="mt-3 flex items-center justify-between gap-3">
+      <span className="text-sm text-slate-100">{label}</span>
+      <select
+        value={value ?? ''}
+        disabled={!options.length}
+        onChange={(event) => onChange(event.target.value || null)}
+        className="w-48 rounded-lg border border-border bg-slate-800 px-2.5 py-1.5 text-sm text-white outline-none focus:border-sky-400 disabled:opacity-50"
+      >
+        <option value="">{allLabel}</option>
+        {options.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
     </label>
   );
 }

@@ -19,9 +19,12 @@ export type Preferences = {
   voiceGuidance: boolean;
   mapStyleId: string;
   showChargers: boolean;
-  showIncidents: boolean;
   /** Minimum charger power in kW to display. 0 shows everything. */
   minChargerKw: number;
+  /** Only show chargers offering this connector. null shows all. */
+  chargerConnector: string | null;
+  /** Only show chargers on this network/operator. null shows all. */
+  chargerNetwork: string | null;
 };
 
 export const defaultRouteOptions: RouteOptions = {
@@ -38,8 +41,9 @@ export const defaultPreferences: Preferences = {
   voiceGuidance: true,
   mapStyleId: 'liberty',
   showChargers: true,
-  showIncidents: true,
-  minChargerKw: 0
+  minChargerKw: 0,
+  chargerConnector: null,
+  chargerNetwork: null
 };
 
 function safeRead<T>(key: string, fallback: T): T {

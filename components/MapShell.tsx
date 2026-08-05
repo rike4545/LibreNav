@@ -25,6 +25,7 @@ import { SearchPanel } from '@/components/SearchPanel';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { MAP_STYLES, appEnv } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
+import { haversineMeters } from '@/lib/geometry';
 import { NavIndex, NavProgress, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock } from '@/lib/nav';
 import { reverseGeocode } from '@/lib/services/geocode';
 import { fetchChargers, fetchPlacesAlongRoute, fetchPlacesNear } from '@/lib/services/overpass';
@@ -67,6 +68,9 @@ import {
 /** Consecutive off-route fixes before we ask for a new route. */
 const REROUTE_THRESHOLD = 3;
 
+/** How many times to retry charger loading after an Overpass outage. */
+const MAX_CHARGER_RETRIES = 3;
+
 export function MapShell() {
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [route, setRoute] = useState<RouteResponse | null>(null);
@@ -76,6 +80,7 @@ export function MapShell() {
 
   const [userPosition, setUserPosition] = useState<UserPosition | null>(null);
   const [geoDenied, setGeoDenied] = useState(false);
+  const [geoResolved, setGeoResolved] = useState(false);
   const [mapCenter, setMapCenter] = useState<Coordinate>({ lat: appEnv.defaultLat, lng: appEnv.defaultLng });
 
   const [navActive, setNavActive] = useState(false);
@@ -94,6 +99,8 @@ export function MapShell() {
   const [activeCategory, setActiveCategory] = useState<PlaceCategoryId | null>(null);
   const [categoryLoading, setCategoryLoading] = useState<PlaceCategoryId | null>(null);
   const [selectedCharger, setSelectedCharger] = useState<ChargerSite | null>(null);
+  const [chargerError, setChargerError] = useState(false);
+  const [chargerAttempt, setChargerAttempt] = useState(0);
 
   const [panelOpen, setPanelOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -108,6 +115,9 @@ export function MapShell() {
   const announcedRef = useRef(new Set<string>());
   const offRouteCountRef = useRef(0);
   const routeAbortRef = useRef<AbortController | null>(null);
+  const pendingDestinationRef = useRef<Waypoint | null>(null);
+  const warnedNoOriginRef = useRef(false);
+  const lastChargerFetchRef = useRef<Coordinate | null>(null);
 
   const destination = waypoints.length > 1 ? waypoints[waypoints.length - 1] : null;
 
@@ -129,6 +139,9 @@ export function MapShell() {
       const here = await getCurrentPosition();
       if (here) setMapCenter(here);
       else setGeoDenied(true);
+      // Settled either way — a pending share destination can now be paired
+      // with an origin, using the map centre if the fix was refused.
+      setGeoResolved(true);
     })();
 
     return watchUserPosition((position) => {
@@ -144,12 +157,49 @@ export function MapShell() {
     if (!shared) return;
 
     setOptions(shared.options);
-    setWaypoints(shared.waypoints);
     setMapCenter(shared.waypoints[0].coordinate);
     setPanelOpen(false);
+
+    if (shared.waypoints.length > 1) {
+      setWaypoints(shared.waypoints);
+    } else {
+      // Legacy ?to= links (and one-stop trips) carry only a destination.
+      // Routing needs two points, so hold it until we have an origin.
+      pendingDestinationRef.current = shared.waypoints[0];
+    }
+
     // Clean the URL so a refresh doesn't re-apply a trip the user has edited.
     window.history.replaceState({}, '', window.location.pathname);
   }, []);
+
+  useEffect(() => {
+    const pending = pendingDestinationRef.current;
+    if (!pending) return;
+
+    // Must be a real fix, not the map centre: the share effect already moved
+    // the centre onto the destination, so falling back to it would route a
+    // point to itself. Keep waiting — a later fix still completes the trip.
+    if (!userPosition) {
+      if (geoResolved && !warnedNoOriginRef.current) {
+        warnedNoOriginRef.current = true;
+        showToast('Turn on location to route to this shared destination.');
+      }
+      return;
+    }
+
+    pendingDestinationRef.current = null;
+    setWaypoints([
+      {
+        id: 'origin',
+        name: 'Current location',
+        label: 'Live position',
+        coordinate: userPosition.coordinate,
+        isCurrentLocation: true
+      },
+      pending
+    ]);
+    setRecents(pushRecent({ id: pending.id, name: pending.name, label: pending.label, coordinate: pending.coordinate }));
+  }, [geoResolved, userPosition, showToast]);
 
   /* ------------------------------------------------------------ routing */
   // Snapshot the stop coordinates so live GPS drift doesn't retrigger routing.
@@ -211,7 +261,10 @@ export function MapShell() {
     const next = computeProgress(route, navIndexRef.current, userPosition, shapeHintRef.current);
     if (!next) return;
 
-    shapeHintRef.current = next.stepIndex > 0 ? route.maneuvers[next.stepIndex - 1].shapeIndex : 0;
+    // Hint with where the driver actually matched, not the previous maneuver:
+    // on a long leg between turns the maneuver vertex falls far outside the
+    // scan window, forcing a full-path rescan on every GPS tick.
+    shapeHintRef.current = next.shapeIndex;
     setProgress(next);
 
     if (next.isOffRoute) {
@@ -255,29 +308,75 @@ export function MapShell() {
   useEffect(() => {
     if (!preferences.showChargers) {
       setChargers([]);
+      // Forget the anchor so re-enabling refetches instead of waiting for the
+      // view to move past the distance gate below.
+      lastChargerFetchRef.current = null;
       return;
     }
 
+    // Debouncing alone isn't enough: the follow camera fires moveend on every
+    // GPS tick, so a long drive would re-query Overpass continuously and get
+    // rate-limited. Only refetch once the view leaves the area we already have.
+    const last = lastChargerFetchRef.current;
+    if (last && haversineMeters(last, mapCenter) < 5000) return;
+
     const controller = new AbortController();
-    // Debounce so panning the map doesn't hammer Overpass.
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
     const timer = setTimeout(() => {
-      fetchChargers(mapCenter, 12, controller.signal)
-        .then(setChargers)
+      const anchor = mapCenter;
+      fetchChargers(anchor, 12, controller.signal)
+        .then((found) => {
+          lastChargerFetchRef.current = anchor;
+          setChargers(found);
+          setChargerError(false);
+          setChargerAttempt(0);
+        })
         .catch((cause: Error) => {
-          if (cause.name !== 'AbortError') setChargers([]);
+          if (cause.name === 'AbortError') return;
+          // Every Overpass mirror can be down at once. Say so rather than
+          // leaving an empty map that reads as "no chargers near you".
+          setChargers([]);
+          setChargerError(true);
+          // Outages are usually brief, and nothing else re-triggers this
+          // effect until the driver happens to pan — so retry a few times.
+          if (chargerAttempt < MAX_CHARGER_RETRIES) {
+            retryTimer = setTimeout(() => setChargerAttempt((n) => n + 1), 15_000);
+          }
         });
     }, 700);
 
     return () => {
       clearTimeout(timer);
+      if (retryTimer) clearTimeout(retryTimer);
       controller.abort();
     };
-  }, [mapCenter.lat, mapCenter.lng, preferences.showChargers]);
+  }, [mapCenter.lat, mapCenter.lng, preferences.showChargers, chargerAttempt]);
 
   const visibleChargers = useMemo(
-    () => chargers.filter((charger) => preferences.minChargerKw === 0 || (charger.powerKw ?? 0) >= preferences.minChargerKw),
-    [chargers, preferences.minChargerKw]
+    () =>
+      chargers.filter((charger) => {
+        if (preferences.minChargerKw > 0 && (charger.powerKw ?? 0) < preferences.minChargerKw) return false;
+        if (preferences.chargerConnector && !charger.plugs.includes(preferences.chargerConnector)) return false;
+        if (preferences.chargerNetwork && charger.network !== preferences.chargerNetwork) return false;
+        return true;
+      }),
+    [chargers, preferences.minChargerKw, preferences.chargerConnector, preferences.chargerNetwork]
   );
+
+  /** Networks present in what's currently loaded, for the filter dropdown. */
+  const chargerNetworks = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const charger of chargers) {
+      if (charger.network && charger.network !== 'Unknown network') {
+        counts.set(charger.network, (counts.get(charger.network) ?? 0) + 1);
+      }
+    }
+    return [...counts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 25)
+      .map(([name]) => name);
+  }, [chargers]);
 
   /* ------------------------------------------------------------ actions */
   const originWaypoint = useCallback((): Waypoint => {
@@ -503,6 +602,11 @@ export function MapShell() {
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
               <span className="text-sm font-semibold">{appEnv.appName}</span>
               {geoDenied ? <span className="text-xs text-amber-300">GPS off</span> : null}
+              {chargerError && preferences.showChargers ? (
+                <span className="text-xs text-amber-300" title="Every Overpass mirror failed to respond.">
+                  Chargers unavailable
+                </span>
+              ) : null}
             </div>
 
             <div className="pointer-events-auto flex items-center gap-2">
@@ -593,6 +697,7 @@ export function MapShell() {
           <SettingsPanel
             preferences={preferences}
             vehicle={vehicle}
+            chargerNetworks={chargerNetworks}
             onPreferencesChange={updatePreferences}
             onVehicleChange={(next) => setVehicle(saveVehicle(next))}
             onClose={() => setSettingsOpen(false)}

@@ -19,6 +19,11 @@ export type NavProgress = {
   courseDeg: number | null;
   /** Portion of the route already driven, 0–1. */
   fraction: number;
+  /**
+   * Geometry vertex the driver matched to. Feed this back as the next call's
+   * hint so the windowed scan stays centred on the driver.
+   */
+  shapeIndex: number;
 };
 
 /**
@@ -87,7 +92,8 @@ export function computeProgress(
     isOffRoute: snap.distanceM > Math.max(OFF_ROUTE_M, (position.accuracyM ?? 0) * 1.5),
     snapped: snap.snapped,
     courseDeg: courseAt(route.coordinates, snap.index),
-    fraction: Math.min(1, Math.max(0, fraction))
+    fraction: Math.min(1, Math.max(0, fraction)),
+    shapeIndex: snap.index
   };
 }
 
@@ -130,10 +136,13 @@ export function formatDuration(seconds: number): string {
 }
 
 /**
- * Announcement thresholds, far → near. Each maneuver fires at most once per
- * band so guidance doesn't repeat while crawling toward a turn.
+ * Announcement thresholds in ascending order, so `find` picks the *tightest*
+ * band the driver is currently inside. Ordering matters: with a descending
+ * list every distance under 1600 m matches the 1600 m band first, that band is
+ * then marked as announced, and the 800/250/60 m calls never fire — one
+ * announcement per turn instead of four.
  */
-const ANNOUNCE_BANDS = [1600, 800, 250, 60];
+const ANNOUNCE_BANDS = [60, 250, 800, 1600];
 
 export function announcementFor(
   maneuver: RouteManeuver,

@@ -96,6 +96,22 @@ export function saveEndpoints(next: Partial<Endpoints>): Endpoints {
   return merged;
 }
 
+/**
+ * Style URL for the selected basemap.
+ *
+ * Any URL that isn't one of the built-ins is treated as a custom basemap and
+ * overrides the picker — otherwise NEXT_PUBLIC_MAP_STYLE_URL and the Settings
+ * field would be stored, shown, and then silently ignored by the style
+ * switcher, which is exactly what self-hosters point at their own tiles with.
+ */
+export function resolveMapStyleUrl(styleId: string): string {
+  const { mapStyleUrl } = getEndpoints();
+  if (mapStyleUrl && !MAP_STYLES.some((style) => style.url === mapStyleUrl)) {
+    return mapStyleUrl;
+  }
+  return MAP_STYLES.find((style) => style.id === styleId)?.url ?? MAP_STYLES[0].url;
+}
+
 export function resetEndpoints(): Endpoints {
   cached = DEFAULT_ENDPOINTS;
   if (typeof window !== 'undefined') {
