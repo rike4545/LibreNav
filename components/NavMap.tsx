@@ -49,6 +49,34 @@ const lineFeature = (coordinates: [number, number][], properties: Record<string,
   geometry: { type: 'LineString', coordinates }
 });
 
+/** Our layers, bottom to top. Order matters: the casing sits under the route. */
+const OVERLAY_LAYERS = [
+  'alternatives-line',
+  'alternatives-hit',
+  'route-casing',
+  'route-line',
+  'route-driven',
+  'chargers-cluster',
+  'chargers-cluster-count',
+  'chargers-point',
+  'places-point',
+  'reports-point'
+];
+
+/**
+ * Push our layers above the basemap's.
+ *
+ * A basemap style keeps loading layers after it first reports itself ready, so
+ * layers added at that moment end up *below* the opaque land fills that arrive
+ * afterwards — the route line silently vanishes under the map. Re-stacking is
+ * cheap and idempotent, so just do it whenever the style changes.
+ */
+function raiseOverlays(map: Map) {
+  for (const id of OVERLAY_LAYERS) {
+    if (map.getLayer(id)) map.moveLayer(id);
+  }
+}
+
 export function NavMap({
   center,
   styleId,
@@ -83,6 +111,69 @@ export function NavMap({
 
   const dataRef = useRef({ route, activeAlternativeId, chargers, places, reports });
   dataRef.current = { route, activeAlternativeId, chargers, places, reports };
+
+  /**
+   * Push the current data into every source.
+   *
+   * Deliberately not gated on `isStyleLoaded`/`idle`: a map that is still
+   * streaming tiles never goes idle, which on a slow connection meant the route
+   * line never got drawn. `setData` is valid the moment a source exists, so the
+   * only precondition is that layers are installed.
+   */
+  const syncOverlayData = useCallback((map: Map) => {
+    const set = (id: string, data: GeoJSON.FeatureCollection) => {
+      const source = map.getSource(id) as GeoJSONSource | undefined;
+      source?.setData(data);
+    };
+
+    const { route: current, activeAlternativeId: activeId, chargers: pins, places: pois, reports: hazards } = dataRef.current;
+
+    if (!current) {
+      set(SOURCES.route, emptyCollection());
+      set(SOURCES.alternatives, emptyCollection());
+    } else {
+      const active = current.alternatives.find((alternative) => alternative.id === activeId);
+      set(SOURCES.route, {
+        type: 'FeatureCollection',
+        features: [lineFeature(active ? active.coordinates : current.coordinates)]
+      });
+
+      // Whichever line isn't selected renders as an alternate.
+      const others: GeoJSON.Feature[] = current.alternatives
+        .filter((alternative) => alternative.id !== activeId)
+        .map((alternative) => lineFeature(alternative.coordinates, { id: alternative.id }));
+      if (active) others.push(lineFeature(current.coordinates, { id: 'main' }));
+
+      set(SOURCES.alternatives, { type: 'FeatureCollection', features: others });
+    }
+
+    set(SOURCES.chargers, {
+      type: 'FeatureCollection',
+      features: pins.map((charger) => ({
+        type: 'Feature',
+        properties: { id: charger.id, powerKw: charger.powerKw ?? 0 },
+        geometry: { type: 'Point', coordinates: [charger.coordinate.lng, charger.coordinate.lat] }
+      }))
+    });
+
+    set(SOURCES.places, {
+      type: 'FeatureCollection',
+      features: pois.map((place) => ({
+        type: 'Feature',
+        properties: { id: place.id },
+        geometry: { type: 'Point', coordinates: [place.coordinate.lng, place.coordinate.lat] }
+      }))
+    });
+
+    set(SOURCES.reports, {
+      type: 'FeatureCollection',
+      features: hazards.map((report) => ({
+        type: 'Feature',
+        properties: { id: report.id, kind: report.kind },
+        geometry: { type: 'Point', coordinates: [report.coordinate.lng, report.coordinate.lat] }
+      }))
+    });
+  }, []);
 
   const installLayers = useCallback((map: Map) => {
     if (map.getSource(SOURCES.route)) return;
@@ -241,7 +332,10 @@ export function NavMap({
         map.getCanvas().style.cursor = '';
       });
     }
-  }, []);
+
+    raiseOverlays(map);
+    syncOverlayData(map);
+  }, [syncOverlayData]);
 
   /* ------------------------------------------------------ map lifecycle */
   useEffect(() => {
@@ -267,10 +361,18 @@ export function NavMap({
       installLayers(map);
     });
 
-    // Re-add our layers after a basemap swap wipes the style.
+    // A basemap swap wipes the style, so re-add our layers. installLayers is a
+    // no-op once they exist, but re-stacking on every styledata is what keeps
+    // the route visible while the basemap streams in its remaining layers.
     map.on('styledata', () => {
-      if (map.isStyleLoaded()) installLayers(map);
+      if (!map.isStyleLoaded()) return;
+      installLayers(map);
+      raiseOverlays(map);
+      syncOverlayData(map);
     });
+
+    // Last word on stacking: nothing else loads after idle.
+    map.on('idle', () => raiseOverlays(map));
 
     map.on('moveend', () => {
       const next = map.getCenter();
@@ -324,38 +426,11 @@ export function NavMap({
     if (style) map.setStyle(style.url, { diff: false });
   }, [styleId]);
 
-  /* ------------------------------------------------------- route layers */
+  /* --------------------------------------------- overlay data -> sources */
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-
-    const apply = () => {
-      const routeSource = map.getSource(SOURCES.route) as GeoJSONSource | undefined;
-      const altSource = map.getSource(SOURCES.alternatives) as GeoJSONSource | undefined;
-      if (!routeSource || !altSource) return;
-
-      if (!route) {
-        routeSource.setData(emptyCollection());
-        altSource.setData(emptyCollection());
-        return;
-      }
-
-      const active = route.alternatives.find((alternative) => alternative.id === activeAlternativeId);
-      const mainCoordinates = active ? active.coordinates : route.coordinates;
-      routeSource.setData({ type: 'FeatureCollection', features: [lineFeature(mainCoordinates)] });
-
-      // Whichever line isn't selected renders as an alternate.
-      const others: GeoJSON.Feature[] = route.alternatives
-        .filter((alternative) => alternative.id !== activeAlternativeId)
-        .map((alternative) => lineFeature(alternative.coordinates, { id: alternative.id }));
-      if (active) others.push(lineFeature(route.coordinates, { id: 'main' }));
-
-      altSource.setData({ type: 'FeatureCollection', features: others });
-    };
-
-    if (map.isStyleLoaded()) apply();
-    else map.once('idle', apply);
-  }, [route, activeAlternativeId]);
+    if (map) syncOverlayData(map);
+  }, [route, activeAlternativeId, chargers, places, reports, syncOverlayData]);
 
   /* --------------------------------------------------- driven-so-far dim */
   useEffect(() => {
@@ -386,46 +461,8 @@ export function NavMap({
     source.setData({ type: 'FeatureCollection', features: driven.length > 1 ? [lineFeature(driven)] : [] });
   }, [navActive, route, snappedPosition]);
 
-  /* ------------------------------------------------------- point layers */
-  useEffect(() => {
-    const map = mapRef.current;
-    const source = map?.getSource(SOURCES.chargers) as GeoJSONSource | undefined;
-    if (!source) return;
-    source.setData({
-      type: 'FeatureCollection',
-      features: chargers.map((charger) => ({
-        type: 'Feature',
-        properties: { id: charger.id, powerKw: charger.powerKw ?? 0 },
-        geometry: { type: 'Point', coordinates: [charger.coordinate.lng, charger.coordinate.lat] }
-      }))
-    });
-  }, [chargers]);
 
-  useEffect(() => {
-    const source = mapRef.current?.getSource(SOURCES.places) as GeoJSONSource | undefined;
-    if (!source) return;
-    source.setData({
-      type: 'FeatureCollection',
-      features: places.map((place) => ({
-        type: 'Feature',
-        properties: { id: place.id },
-        geometry: { type: 'Point', coordinates: [place.coordinate.lng, place.coordinate.lat] }
-      }))
-    });
-  }, [places]);
 
-  useEffect(() => {
-    const source = mapRef.current?.getSource(SOURCES.reports) as GeoJSONSource | undefined;
-    if (!source) return;
-    source.setData({
-      type: 'FeatureCollection',
-      features: reports.map((report) => ({
-        type: 'Feature',
-        properties: { id: report.id, kind: report.kind },
-        geometry: { type: 'Point', coordinates: [report.coordinate.lng, report.coordinate.lat] }
-      }))
-    });
-  }, [reports]);
 
 
   /* -------------------------------------------------- waypoint markers */
