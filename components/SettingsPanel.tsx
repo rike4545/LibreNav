@@ -84,7 +84,7 @@ export function SettingsPanel({
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition',
                     preferences.theme === choice
-                      ? 'border-sky-400 bg-sky-500/25 text-sky-100'
+                      ? 'border-sky-400 bg-sky-500/25 text-fg'
                       : 'border-line bg-raised text-muted hover:bg-strong'
                   )}
                 >
@@ -133,7 +133,7 @@ export function SettingsPanel({
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
                     preferences.mapStyleId === style.id
-                      ? 'border-sky-400 bg-sky-500/25 text-sky-100'
+                      ? 'border-sky-400 bg-sky-500/25 text-fg'
                       : 'border-line bg-raised text-muted hover:bg-strong'
                   )}
                 >
@@ -290,14 +290,14 @@ export function SettingsPanel({
               href="https://www.openwebninja.com/documentation"
               target="_blank"
               rel="noreferrer noopener"
-              className="text-sky-300 underline-offset-2 hover:underline"
+              className="text-accent underline-offset-2 hover:underline"
             >
               OpenWeb Ninja
             </a>{' '}
             key mixes business results — ratings, opening status, addresses — into search alongside
             OpenStreetMap, which tends to be thin on shops and restaurants.
           </p>
-          <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-amber-100">
+          <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-fg">
             Your key is stored only in this browser and is never sent anywhere except that API. It is
             deliberately not built into the app: LibreNav is a static site, so a key compiled in would
             be readable by every visitor and by anyone reading the repository.
@@ -344,7 +344,7 @@ export function SettingsPanel({
           href="https://buymeacoffee.com/myevcompanionapp"
           target="_blank"
           rel="noreferrer noopener"
-          className="mt-2 flex items-center justify-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/25"
+          className="mt-2 flex items-center justify-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-fg transition hover:bg-amber-500/25"
         >
           <Coffee className="h-4 w-4" />
           Support this project

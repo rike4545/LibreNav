@@ -271,7 +271,7 @@ export function SearchPanel({
                 className={cn(
                   'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
                   activeCategory === category.id
-                    ? 'border-purple-400 bg-purple-500/25 text-purple-100'
+                    ? 'border-purple-400 bg-purple-500/25 text-fg'
                     : 'border-line bg-raised text-muted hover:bg-strong'
                 )}
               >
@@ -285,7 +285,7 @@ export function SearchPanel({
             <button
               type="button"
               onClick={() => onCategorySelect(activeCategory, true)}
-              className="mt-2 w-full rounded-xl border border-purple-400/30 bg-purple-500/10 px-3 py-2 text-xs font-semibold text-purple-100 transition hover:bg-purple-500/20"
+              className="mt-2 w-full rounded-xl border border-purple-400/30 bg-purple-500/10 px-3 py-2 text-xs font-semibold text-fg transition hover:bg-purple-500/20"
             >
               Search along the whole route instead
             </button>
@@ -401,7 +401,7 @@ export function SearchPanel({
                       className={cn(
                         'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
                         options.mode === mode
-                          ? 'border-sky-400 bg-sky-500/25 text-sky-100'
+                          ? 'border-sky-400 bg-sky-500/25 text-fg'
                           : 'border-line bg-raised text-muted hover:bg-strong'
                       )}
                     >
@@ -540,7 +540,7 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
       aria-pressed={active}
       className={cn(
         'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
-        active ? 'border-sky-400 bg-sky-500/25 text-sky-100' : 'border-line bg-raised text-muted hover:bg-strong'
+        active ? 'border-sky-400 bg-sky-500/25 text-fg' : 'border-line bg-raised text-muted hover:bg-strong'
       )}
     >
       {label}

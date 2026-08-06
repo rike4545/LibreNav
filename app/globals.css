@@ -22,6 +22,7 @@
   --subtle: 140 154 176;
   --line: 74 90 116;
   --page: 2 6 23;
+  --accent-fg: 125 211 252;
   --shadow-panel: 0 14px 40px rgba(2, 6, 23, 0.55);
 }
 
@@ -35,6 +36,7 @@
   --subtle: 100 116 139;
   --line: 187 198 212;
   --page: 226 232 240;
+  --accent-fg: 2 105 161;
   --shadow-panel: 0 14px 40px rgba(15, 23, 42, 0.22);
 }
 
@@ -56,10 +58,66 @@ body {
   box-sizing: border-box;
 }
 
-/* Keep MapLibre's own controls clear of the bottom route sheet. */
+/*
+ * iOS safe areas.
+ *
+ * Added to the home screen the app runs fullscreen under the status bar and
+ * home indicator, so fixed chrome collides with the clock and the gesture bar.
+ * viewport-fit=cover (set in the layout) only *enables* env(); the padding
+ * still has to be applied, which is what these do.
+ */
+.safe-top {
+  padding-top: max(0.75rem, env(safe-area-inset-top));
+}
+
+.safe-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+.safe-x {
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+/*
+ * Cap the bottom sheet so it can never run off the screen. It has to clear the
+ * status bar above and the home indicator below, and scroll internally rather
+ * than pushing its own content out of view.
+ */
+.sheet-max {
+  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 5rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sheet-scroll {
+  flex: 1 1 auto;
+  /* Without this a flex child refuses to shrink below its content height, so
+     overflow-y never engages and the sheet runs off the screen instead. Same
+     trap as needing minmax(0,1fr) in a grid. */
+  min-height: 0;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+/* Links on tinted cards; sky-300 is unreadable on a light surface. */
+.text-accent {
+  color: rgb(var(--accent-fg));
+}
+
+/* Keep MapLibre's own controls clear of the bottom sheet and home indicator. */
 .maplibregl-ctrl-bottom-left,
 .maplibregl-ctrl-bottom-right {
-  bottom: 13rem;
+  bottom: calc(13rem + env(safe-area-inset-bottom));
+}
+
+@media (max-width: 640px) {
+  .maplibregl-ctrl-bottom-left,
+  .maplibregl-ctrl-bottom-right {
+    bottom: calc(9rem + env(safe-area-inset-bottom));
+  }
 }
 
 .maplibregl-ctrl-attrib.maplibregl-compact {

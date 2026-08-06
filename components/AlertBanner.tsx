@@ -12,12 +12,12 @@ type Props = {
 };
 
 const STYLES: Record<RoadAlertKind, { label: string; icon: typeof Camera; tone: string }> = {
-  'speed-camera': { label: 'Speed camera', icon: Camera, tone: 'border-amber-400/60 bg-amber-500/20 text-amber-100' },
-  police: { label: 'Police reported', icon: ShieldAlert, tone: 'border-sky-400/60 bg-sky-500/20 text-sky-100' },
-  crash: { label: 'Crash reported', icon: Car, tone: 'border-rose-400/60 bg-rose-500/20 text-rose-100' },
-  closure: { label: 'Road closed', icon: Construction, tone: 'border-rose-400/60 bg-rose-500/20 text-rose-100' },
-  traffic: { label: 'Heavy traffic', icon: TrafficCone, tone: 'border-orange-400/60 bg-orange-500/20 text-orange-100' },
-  hazard: { label: 'Hazard reported', icon: AlertTriangle, tone: 'border-amber-400/60 bg-amber-500/20 text-amber-100' }
+  'speed-camera': { label: 'Speed camera', icon: Camera, tone: 'border-amber-400/60 bg-amber-500/20 text-fg' },
+  police: { label: 'Police reported', icon: ShieldAlert, tone: 'border-sky-400/60 bg-sky-500/20 text-fg' },
+  crash: { label: 'Crash reported', icon: Car, tone: 'border-rose-400/60 bg-rose-500/20 text-fg' },
+  closure: { label: 'Road closed', icon: Construction, tone: 'border-rose-400/60 bg-rose-500/20 text-fg' },
+  traffic: { label: 'Heavy traffic', icon: TrafficCone, tone: 'border-orange-400/60 bg-orange-500/20 text-fg' },
+  hazard: { label: 'Hazard reported', icon: AlertTriangle, tone: 'border-amber-400/60 bg-amber-500/20 text-fg' }
 };
 
 export function AlertBanner({ alert, distanceM, imperial }: Props) {

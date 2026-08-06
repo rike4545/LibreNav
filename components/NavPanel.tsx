@@ -28,7 +28,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
   const sign = step.sign;
 
   return (
-    <div className="pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 p-3">
+    <div className="safe-top safe-x pointer-events-none absolute inset-x-0 top-0 z-40 flex flex-col items-center gap-2 pb-3">
       {/* Primary maneuver banner */}
       <div
         className={cn(
@@ -53,7 +53,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
             {sign ? (
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {sign.exitNumbers.map((exit) => (
-                  <span key={exit} className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-emerald-200">
+                  <span key={exit} className="rounded-md bg-emerald-500/20 px-2 py-0.5 text-xs font-bold text-fg">
                     Exit {exit}
                   </span>
                 ))}
@@ -108,7 +108,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
       </div>
 
       {rerouting ? (
-        <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-sm font-medium text-amber-100 shadow-panel backdrop-blur">
+        <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/20 px-4 py-2 text-sm font-medium text-fg shadow-panel backdrop-blur">
           <AlertTriangle className="h-4 w-4" />
           Off route — finding a new way
         </div>

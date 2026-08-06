@@ -33,7 +33,7 @@ export default function DiscountsPage() {
                 href="https://buymeacoffee.com/myevcompanionapp"
                 target="_blank"
                 rel="noreferrer noopener"
-                className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/25"
+                className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-fg transition hover:bg-amber-500/25"
               >
                 <Coffee className="h-4 w-4" />
                 Support this project

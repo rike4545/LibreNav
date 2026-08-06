@@ -47,7 +47,7 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
           <span
             className={cn(
               'rounded-full px-2.5 py-1 text-xs font-bold',
-              tier === 'ultra' ? 'bg-cyan-500/20 text-cyan-200' : tier === 'fast' ? 'bg-emerald-500/20 text-emerald-200' : 'bg-lime-500/20 text-lime-200'
+              tier === 'ultra' ? 'bg-cyan-500/20 text-fg' : tier === 'fast' ? 'bg-emerald-500/20 text-fg' : 'bg-lime-500/20 text-fg'
             )}
           >
             {power} kW
@@ -87,7 +87,7 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
           <button
             type="button"
             onClick={onAddStop}
-            className="flex items-center justify-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/25"
+            className="flex items-center justify-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-fg transition hover:bg-amber-500/25"
           >
             <Plus className="h-4 w-4" />
             Add stop

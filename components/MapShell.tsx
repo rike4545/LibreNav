@@ -64,6 +64,7 @@ import {
   setPlaceRole,
   toggleSavedPlace
 } from '@/lib/storage';
+import { emitToHost, listenToHost, readEmbedConfig, routeEvent, stopsToWaypoints } from '@/lib/embed';
 import { downloadGpx, trackDistanceKm } from '@/lib/gpx';
 import { estimateTrafficDelay } from '@/lib/traffic';
 import { StopWeather, fetchWeatherAt } from '@/lib/services/weather';
@@ -141,6 +142,11 @@ export function MapShell() {
   const [loopBusy, setLoopBusy] = useState(false);
   const loopRotationRef = useRef(0);
 
+  // Read once: the host contract is fixed for the life of the page.
+  const embed = useMemo(() => readEmbedConfig(), []);
+  const arrivedRef = useRef(false);
+  const autostartRef = useRef(false);
+
   const [panelOpen, setPanelOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -169,6 +175,45 @@ export function MapShell() {
   useEffect(() => () => void releaseWakeLock(), []);
 
   useEffect(() => configureVoice(voiceSettings), [voiceSettings]);
+
+  /* -------------------------------------------------------- host bridge */
+  useEffect(() => {
+    if (!embed.embedded) return;
+
+    emitToHost({ type: 'librenav:ready' }, embed);
+
+    return listenToHost(embed, (command) => {
+      switch (command.type) {
+        case 'librenav:navigate': {
+          const stops = stopsToWaypoints(command.stops);
+          if (stops.length < 2) {
+            emitToHost({ type: 'librenav:error', message: 'Need at least two stops.' }, embed);
+            return;
+          }
+          arrivedRef.current = false;
+          setWaypoints(stops);
+          setPanelOpen(false);
+          if (command.autostart) autostartRef.current = true;
+          break;
+        }
+        case 'librenav:cancel':
+          clearRoute();
+          emitToHost({ type: 'librenav:cancelled' }, embed);
+          break;
+        case 'librenav:recenter':
+          setRecenterToken((token) => token + 1);
+          break;
+        case 'librenav:setVehicle':
+          setVehicle((current) => saveVehicle({ ...current, ...command.vehicle }));
+          break;
+        case 'librenav:setUnits':
+          setPreferences((current) => savePreferences({ ...current, imperial: command.imperial }));
+          break;
+      }
+    });
+    // clearRoute is stable enough for the life of the bridge.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embed]);
 
   /* ---------------------------------------------------------- theming */
   useEffect(() => {
@@ -905,11 +950,11 @@ export function MapShell() {
         />
       ) : (
         <>
-          <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
+          <header className="safe-top safe-x pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 pb-3">
             <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 shadow-panel">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
-              <span className="text-sm font-semibold">{appEnv.appName}</span>
-              {geoDenied ? <span className="text-xs text-amber-300">GPS off</span> : null}
+              <span className="hidden text-sm font-semibold sm:inline">{appEnv.appName}</span>
+              {geoDenied ? <span className="hidden text-xs text-amber-400 sm:inline">GPS off</span> : null}
               {recording ? (
                 <span className="flex items-center gap-1.5 text-xs text-rose-300">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
@@ -928,7 +973,7 @@ export function MapShell() {
               ) : null}
             </div>
 
-            <div className="pointer-events-auto flex items-center gap-2">
+            <div className="pointer-events-auto flex min-w-0 flex-nowrap items-center justify-end gap-1.5">
               <a
                 href="https://buymeacoffee.com/myevcompanionapp"
                 target="_blank"
@@ -952,7 +997,7 @@ export function MapShell() {
                 aria-label={recording ? 'Stop recording and export GPX' : 'Record GPS track'}
                 title={recording ? 'Stop and export GPX' : 'Record GPS track'}
                 className={cn(
-                  'rounded-full border p-2.5 shadow-panel backdrop-blur transition',
+                  'rounded-full border p-2 shadow-panel transition sm:p-2.5',
                   recording
                     ? 'border-rose-400/60 bg-rose-500/25 text-rose-200 hover:bg-rose-500/35'
                     : 'border-line bg-surface/95 text-muted hover:bg-strong'
@@ -967,9 +1012,9 @@ export function MapShell() {
                 aria-pressed={preferences.terrain3d}
                 title="3D terrain"
                 className={cn(
-                  'rounded-full border p-2.5 shadow-panel backdrop-blur transition',
+                  'rounded-full border p-2 shadow-panel transition sm:p-2.5',
                   preferences.terrain3d
-                    ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200'
+                    ? 'border-emerald-400/60 bg-emerald-500/20 text-fg'
                     : 'border-line bg-surface/95 text-muted hover:bg-strong'
                 )}
               >
@@ -1000,7 +1045,7 @@ export function MapShell() {
       {/* Speed + posted limit, and whatever is coming up on the road */}
       {navActive ? (
         <>
-          <div className="absolute bottom-6 left-4 z-30">
+          <div className="absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+1rem))] left-4 z-30">
             <SpeedPanel
               speedKmh={userPosition && userPosition.speedKmh > 1 ? userPosition.speedKmh : null}
               limitKmh={currentLimitKmh}
@@ -1008,7 +1053,7 @@ export function MapShell() {
             />
           </div>
           {preferences.alertsEnabled && upcomingAlert ? (
-            <div className="pointer-events-none absolute bottom-6 left-1/2 z-30 -translate-x-1/2">
+            <div className="pointer-events-none absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+1rem))] left-1/2 z-30 -translate-x-1/2">
               <AlertBanner
                 alert={upcomingAlert.alert}
                 distanceM={upcomingAlert.distanceM}
@@ -1069,8 +1114,8 @@ export function MapShell() {
       ) : null}
 
       {!navActive && !selectedCharger && !reportOpen ? (
-        <div className="absolute inset-x-0 bottom-0 z-20 px-2 pb-2">
-          <div className="mx-auto w-[min(60rem,100%)] overflow-hidden rounded-[1.75rem] border border-line bg-surface shadow-panel">
+        <div className="safe-bottom safe-x absolute inset-x-0 bottom-0 z-20">
+          <div className="sheet-max mx-auto w-[min(60rem,100%)] rounded-[1.75rem] border border-line bg-surface shadow-panel">
             {/* One surface: search, discovery, and the trip all live here, so
                 there is no separate "where to?" prompt competing with it. */}
             <SearchPanel
@@ -1102,7 +1147,7 @@ export function MapShell() {
               imperialLoop={preferences.imperial}
             />
 
-            <div className="border-t border-line p-4">
+            <div className="sheet-scroll border-t border-line p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 {routeLoading ? (
@@ -1261,7 +1306,7 @@ export function MapShell() {
                         : ''}
                     </p>
                     {weather.caution ? (
-                      <p className="mt-1 text-sm font-semibold text-amber-100">{weather.caution}</p>
+                      <p className="mt-1 text-sm font-semibold text-fg">{weather.caution}</p>
                     ) : null}
                   </div>
                 ) : null}
@@ -1278,12 +1323,12 @@ export function MapShell() {
                       Range estimate
                     </div>
                     {range.reachable ? (
-                      <p className="mt-2 text-sm text-emerald-100">
+                      <p className="mt-2 text-sm text-fg">
                         Arrive with about <strong className="tabular-nums">{Math.round(range.arrivalSocPercent)}%</strong>. Current
                         charge covers {formatDistanceKm(range.rangeKm, preferences.imperial)}.
                       </p>
                     ) : (
-                      <p className="mt-2 text-sm text-amber-100">
+                      <p className="mt-2 text-sm text-fg">
                         {range.reserveReachedKm !== null
                           ? `You'd hit your reserve about ${formatDistanceKm(range.reserveReachedKm, preferences.imperial)} in. Add a charging stop.`
                           : 'This trip is beyond your current charge. Add a charging stop.'}
@@ -1292,7 +1337,7 @@ export function MapShell() {
                     <button
                       type="button"
                       onClick={() => handleCategory('charging', true)}
-                      className="mt-2 text-xs font-semibold text-sky-300 underline-offset-2 hover:underline"
+                      className="mt-2 text-xs font-semibold text-accent underline-offset-2 hover:underline"
                     >
                       Find chargers along this route
                     </button>
