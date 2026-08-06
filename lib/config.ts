@@ -76,6 +76,34 @@ export const appEnv = {
 };
 
 const ENDPOINTS_KEY = 'librenav.endpoints';
+const API_KEY_KEY = 'librenav.localDataKey';
+
+/** OpenWeb Ninja Real-Time Local & Maps Data. */
+export const LOCAL_DATA_BASE = 'https://api.openwebninja.com/realtime-local-and-maps-data';
+
+/**
+ * Optional key for richer place data, held only in this browser.
+ *
+ * Deliberately not a build-time env var and never committed: LibreNav ships as
+ * a static bundle, so anything baked in is readable by every visitor and in the
+ * public repo. Keeping it in localStorage means the key belongs to whoever
+ * pasted it and travels no further than their own machine.
+ */
+export function getLocalDataKey(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(API_KEY_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveLocalDataKey(key: string): void {
+  if (typeof window === 'undefined') return;
+  const trimmed = key.trim();
+  if (trimmed) window.localStorage.setItem(API_KEY_KEY, trimmed);
+  else window.localStorage.removeItem(API_KEY_KEY);
+}
 
 let cached: Endpoints | null = null;
 

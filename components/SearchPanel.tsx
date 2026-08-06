@@ -26,6 +26,7 @@ import {
 } from 'lucide-react';
 import { PLACE_CATEGORIES } from '@/lib/services/overpass';
 import { searchPlaces } from '@/lib/services/geocode';
+import { hasLocalDataKey, searchBusinesses } from '@/lib/services/localdata';
 import { SavedPlace } from '@/lib/storage';
 import { bearingCompass } from '@/lib/format';
 import { cn, formatDistanceKm } from '@/lib/utils';
@@ -114,14 +115,33 @@ export function SearchPanel({
       const controller = new AbortController();
       abortRef.current = controller;
 
-      searchPlaces(trimmed, { near: anchor, signal: controller.signal })
-        .then((found) => {
-          setResults(found);
-          setError(found.length ? null : 'No matches found.');
-        })
-        .catch((cause: Error) => {
-          if (cause.name === 'AbortError') return;
-          setError('Search is unavailable right now.');
+      // Photon is the baseline and always runs; the business API only joins in
+      // when the user has supplied their own key, and never blocks the result.
+      const geocoded = searchPlaces(trimmed, { near: anchor, signal: controller.signal });
+      const businesses = hasLocalDataKey()
+        ? searchBusinesses(trimmed, { near: anchor, signal: controller.signal }).catch(() => [])
+        : Promise.resolve([]);
+
+      Promise.allSettled([geocoded, businesses])
+        .then(([geoResult, bizResult]) => {
+          if (controller.signal.aborted) return;
+          const places = geoResult.status === 'fulfilled' ? geoResult.value : [];
+          const found = bizResult.status === 'fulfilled' ? bizResult.value : [];
+
+          // Businesses lead: someone typing a place name usually wants the shop,
+          // not the street it sits on.
+          const merged = [...found, ...places];
+          const seen = new Set<string>();
+          const unique = merged.filter((item) => {
+            const key = `${item.coordinate.lat.toFixed(4)},${item.coordinate.lng.toFixed(4)}`;
+            if (seen.has(key)) return false;
+            seen.add(key);
+            return true;
+          });
+
+          setResults(unique);
+          if (unique.length) setError(null);
+          else setError(geoResult.status === 'rejected' ? 'Search is unavailable right now.' : 'No matches found.');
         })
         .finally(() => {
           if (!controller.signal.aborted) setSearching(false);

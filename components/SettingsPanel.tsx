@@ -1,8 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { BatteryCharging, Coffee, Globe, RotateCcw, Server, X } from 'lucide-react';
-import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, resetEndpoints, saveEndpoints } from '@/lib/config';
+import { BatteryCharging, Coffee, Globe, KeyRound, RotateCcw, Server, X } from 'lucide-react';
+import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, getLocalDataKey, resetEndpoints, saveEndpoints, saveLocalDataKey } from '@/lib/config';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
 import { Preferences, ThemeChoice } from '@/lib/storage';
 import { cn } from '@/lib/utils';
@@ -21,6 +21,14 @@ type Props = {
 export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPreferencesChange, onVehicleChange, onClose }: Props) {
   const [endpoints, setEndpoints] = useState<Endpoints>(() => getEndpoints());
   const [saved, setSaved] = useState(false);
+  const [localDataKey, setLocalDataKey] = useState(() => getLocalDataKey());
+  const [keySaved, setKeySaved] = useState(false);
+
+  function applyLocalDataKey() {
+    saveLocalDataKey(localDataKey);
+    setKeySaved(true);
+    setTimeout(() => setKeySaved(false), 2200);
+  }
 
   function applyEndpoints() {
     saveEndpoints(endpoints);
@@ -188,6 +196,63 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
               Defaults
             </button>
             {saved ? <span className="text-xs font-medium text-emerald-300">Saved</span> : null}
+          </div>
+        </Section>
+
+        <Section title="Place data key (optional)" icon={<KeyRound className="h-4 w-4" />}>
+          <p className="mb-3 text-xs leading-relaxed text-subtle">
+            LibreNav works fully without this. Adding an{' '}
+            <a
+              href="https://www.openwebninja.com/documentation"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-sky-300 underline-offset-2 hover:underline"
+            >
+              OpenWeb Ninja
+            </a>{' '}
+            key mixes business results — ratings, opening status, addresses — into search alongside
+            OpenStreetMap, which tends to be thin on shops and restaurants.
+          </p>
+          <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-amber-100">
+            Your key is stored only in this browser and is never sent anywhere except that API. It is
+            deliberately not built into the app: LibreNav is a static site, so a key compiled in would
+            be readable by every visitor and by anyone reading the repository.
+          </p>
+
+          <label className="block">
+            <span className="block text-xs font-medium text-muted">API key</span>
+            <input
+              type="password"
+              value={localDataKey}
+              placeholder="Paste your key"
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => setLocalDataKey(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-fg outline-none focus:border-sky-400"
+            />
+          </label>
+
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={applyLocalDataKey}
+              className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400"
+            >
+              Save key
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLocalDataKey('');
+                saveLocalDataKey('');
+                setKeySaved(true);
+                setTimeout(() => setKeySaved(false), 2200);
+              }}
+              className="rounded-full border border-line bg-raised px-4 py-2 text-sm font-medium text-muted transition hover:bg-strong"
+            >
+              Remove
+            </button>
+            {keySaved ? <span className="text-xs font-medium text-emerald-300">Saved</span> : null}
           </div>
         </Section>
 
