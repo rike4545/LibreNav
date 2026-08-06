@@ -1,5 +1,5 @@
 import { cumulativeDistances, distanceAlong, snapToPath } from '@/lib/geometry';
-import { RouteManeuver, RouteResponse, UserPosition } from '@/types/map';
+import { RoadAlert, RouteManeuver, RouteResponse, UserPosition } from '@/types/map';
 
 export type NavProgress = {
   /** Index into route.maneuvers of the turn being approached. */
@@ -111,6 +111,62 @@ function courseAt(path: [number, number][], index: number): number | null {
   const y = Math.sin(dLng) * Math.cos(lat2);
   const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dLng);
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
+
+/**
+ * The next alert the driver is approaching.
+ *
+ * Alerts are pre-sorted by distance along the route, so this is a scan from the
+ * driver's position forward. A small backward tolerance keeps an alert visible
+ * for the moment either side of passing it rather than flicking away early.
+ */
+export function nextAlertAhead(
+  alerts: RoadAlert[],
+  travelledM: number,
+  lookaheadM = 1200
+): { alert: RoadAlert; distanceM: number } | null {
+  for (const alert of alerts) {
+    if (alert.distanceAlongM === undefined) continue;
+    const delta = alert.distanceAlongM - travelledM;
+    if (delta < -25) continue;
+    if (delta > lookaheadM) break;
+    return { alert, distanceM: Math.max(0, delta) };
+  }
+  return null;
+}
+
+/** Announce an alert once, when it comes inside the callout distance. */
+export function alertAnnouncement(
+  alert: RoadAlert,
+  distanceM: number,
+  alreadyAnnounced: Set<string>,
+  imperial: boolean
+): string | null {
+  if (distanceM > 500) return null;
+  if (alreadyAnnounced.has(alert.id)) return null;
+  alreadyAnnounced.add(alert.id);
+
+  const where = `in ${formatDistanceM(Math.round(distanceM / 50) * 50, imperial)}`;
+  switch (alert.kind) {
+    case 'speed-camera':
+      return alert.limitKmh
+        ? `Speed camera ${where}, limit ${formatSpeedForSpeech(alert.limitKmh, imperial)}.`
+        : `Speed camera ${where}.`;
+    case 'police':
+      return `Police reported ${where}.`;
+    case 'crash':
+      return `Crash reported ${where}.`;
+    case 'closure':
+      return `Road closure reported ${where}.`;
+    case 'traffic':
+      return `Heavy traffic reported ${where}.`;
+    default:
+      return `Hazard reported ${where}.`;
+  }
+}
+
+function formatSpeedForSpeech(kmh: number, imperial: boolean): string {
+  return imperial ? `${Math.round(kmh * 0.621371)} miles per hour` : `${Math.round(kmh)} kilometres per hour`;
 }
 
 export function formatEtaClock(remainingSeconds: number): string {

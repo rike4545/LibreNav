@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { BatteryCharging, Globe, RotateCcw, Server, X } from 'lucide-react';
+import { BatteryCharging, Coffee, Globe, RotateCcw, Server, X } from 'lucide-react';
 import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, resetEndpoints, saveEndpoints } from '@/lib/config';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
 import { Preferences } from '@/lib/storage';
@@ -61,6 +61,18 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
             label="Show chargers"
             checked={preferences.showChargers}
             onChange={(value) => onPreferencesChange({ ...preferences, showChargers: value })}
+          />
+          <Toggle
+            label="Road alerts"
+            hint="Warn on approach to speed cameras and your reported hazards."
+            checked={preferences.alertsEnabled}
+            onChange={(value) => onPreferencesChange({ ...preferences, alertsEnabled: value })}
+          />
+          <Toggle
+            label="3D terrain"
+            hint="Elevation shading from open AWS terrain tiles."
+            checked={preferences.terrain3d}
+            onChange={(value) => onPreferencesChange({ ...preferences, terrain3d: value })}
           />
           <div className="mt-3">
             <div className="text-xs font-medium text-slate-300">Map style</div>
@@ -158,9 +170,19 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
           </div>
         </Section>
 
+        <a
+          href="https://buymeacoffee.com/myevcompanionapp"
+          target="_blank"
+          rel="noreferrer noopener"
+          className="mt-2 flex items-center justify-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-2.5 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/25"
+        >
+          <Coffee className="h-4 w-4" />
+          Support this project
+        </a>
+
         <p className="mt-5 border-t border-border pt-4 text-xs leading-relaxed text-slate-500">
           Map data © OpenStreetMap contributors. Routing by Valhalla (FOSSGIS), search by Photon (Komoot), places via
-          Overpass. Everything you save stays in this browser.
+          Overpass, speed limits and cameras from OSM via Valhalla and Overpass. Everything you save stays in this browser.
         </p>
       </div>
     </div>

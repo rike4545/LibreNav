@@ -25,6 +25,10 @@ export type Preferences = {
   chargerConnector: string | null;
   /** Only show chargers on this network/operator. null shows all. */
   chargerNetwork: string | null;
+  /** Render elevation as 3D terrain. */
+  terrain3d: boolean;
+  /** Warn on approach to speed cameras and reported hazards. */
+  alertsEnabled: boolean;
 };
 
 export const defaultRouteOptions: RouteOptions = {
@@ -43,7 +47,9 @@ export const defaultPreferences: Preferences = {
   showChargers: true,
   minChargerKw: 0,
   chargerConnector: null,
-  chargerNetwork: null
+  chargerNetwork: null,
+  terrain3d: false,
+  alertsEnabled: true
 };
 
 function safeRead<T>(key: string, fallback: T): T {

@@ -8,6 +8,8 @@ no tracking. Everything you save stays in your own browser.
 
 **Live app: https://rike4545.github.io/LibreNav/**
 
+If it's useful to you, you can [support the project](https://buymeacoffee.com/myevcompanionapp).
+
 Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla and searched by Photon.
 
 ## Features
@@ -19,6 +21,10 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - ETA that counts down against real progress, plus arrival clock and remaining distance
 - Voice guidance via the Web Speech API, announced once per distance band
 - Follow camera that pitches into a driving view and flattens when you stop
+- Posted speed limits with an over-limit warning, read from OpenStreetMap
+- Speed camera warnings on approach, with the posted limit where OSM records one
+- Hazard reports placed along your route, announced once as you come up on them
+- Optional 3D terrain from open elevation tiles
 
 **Search and places**
 - Debounced autocomplete with location bias, so "main street" resolves near you
@@ -33,6 +39,11 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Detail cards with connector types, power, operator, bay count, access, fee, and hours from OSM tags
 - Filter out chargers below a power threshold
 - Range estimate against your vehicle profile, with a warning and a one-tap "find chargers along this route"
+
+**Reporting and tracks**
+- Report police, crashes, traffic, hazards, closures, or cameras at your location
+- Reports show on the map by type, alert you on approach, and expire after a day
+- Record your drive and export it as a GPX file
 
 **Trip planning**
 - Multi-stop routing with reorder and remove
@@ -64,6 +75,9 @@ the browser directly against public, CORS-enabled OSM services in `lib/services/
 | Search / geocoding | Photon | `photon.komoot.io` (Komoot) |
 | Places & chargers | Overpass | `overpass-api.de`, with mirror failover |
 | Basemap | MapLibre styles | OpenFreeMap and CARTO, key-less |
+| Speed limits | Valhalla `trace_attributes` | one call per route, `edge_walk` |
+| Speed cameras | Overpass | `highway=speed_camera` along the route |
+| Elevation | AWS Terrain Tiles | Terrarium DEM, open data |
 
 This is what makes the public link work for anyone who opens it, and it's also why the app has no
 signup: there is no backend to sign up to.
@@ -114,6 +128,12 @@ Worth knowing before you rely on it:
 - **Public services are fair-use.** Heavy or commercial traffic should self-host or arrange its own
   instances rather than leaning on FOSSGIS and Komoot.
 - **Hazard reports are local only.** They stay in your browser and expire after 24 hours.
+  LibreNav has no server, so there is nothing to share them with other drivers — this is not a
+  community reporting network, and it will not behave like one.
+- **No live Waze data.** Waze reports are proprietary and only reachable through a private
+  endpoint, so LibreNav does not use them. Alerts here come from OpenStreetMap and from you.
+- **Speed limits and cameras are only as good as OSM.** Many roads carry no `maxspeed` tag, and
+  camera coverage varies enormously by country. Never treat either as authoritative.
 
 ## Attribution
 
@@ -121,6 +141,7 @@ Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright) contributor
 Routing by [Valhalla](https://valhalla.github.io/valhalla/) via FOSSGIS.
 Geocoding by [Photon](https://photon.komoot.io) via Komoot.
 Basemaps by [OpenFreeMap](https://openfreemap.org) and [CARTO](https://carto.com/basemaps/).
+Elevation from [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/).
 
 ## License
 

@@ -21,10 +21,10 @@ export type DiscountSection = {
 export const discountSections: DiscountSection[] = [
   {
     id: 'app-offers',
-    title: 'OpenNav offers',
+    title: 'LibreNav offers',
     description: 'App-specific codes and affiliate campaigns live here when they are available.',
-    emptyStateTitle: 'No active OpenNav offers',
-    emptyStateDescription: 'OpenNav does not have any live coupon codes, referrals, or affiliate links configured right now.',
+    emptyStateTitle: 'No active LibreNav offers',
+    emptyStateDescription: 'LibreNav does not have any live coupon codes, referrals, or affiliate links configured right now.',
     footnote: 'Keeping this section visible means future partner changes only need one content edit.',
     items: []
   },

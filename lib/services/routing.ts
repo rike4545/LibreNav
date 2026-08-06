@@ -196,7 +196,9 @@ function parseTrip(trip: ValhallaTrip | undefined): Omit<RouteResponse, 'alterna
     legSummaries.push({
       distanceKm: leg.summary?.length ?? 0,
       durationMin: (leg.summary?.time ?? 0) / 60,
-      startShapeIndex: offset
+      startShapeIndex: offset,
+      // Kept verbatim so trace_attributes can edge_walk it for speed limits.
+      encodedShape: leg.shape
     });
 
     for (const maneuver of leg.maneuvers ?? []) {

@@ -90,6 +90,34 @@ export type RouteLeg = {
   durationMin: number;
   /** Index into the full route geometry where this leg starts. */
   startShapeIndex: number;
+  /** Valhalla's polyline6 for this leg, replayed to trace_attributes. */
+  encodedShape: string;
+};
+
+/** A run of the route sharing one posted speed limit. */
+export type SpeedLimitSpan = {
+  /** Inclusive start index into the full route geometry. */
+  startIndex: number;
+  /** Exclusive end index. */
+  endIndex: number;
+  /** Posted limit in km/h, or null where OSM has no maxspeed tag. */
+  limitKmh: number | null;
+  roadName?: string;
+};
+
+export type RoadAlertKind = 'speed-camera' | 'police' | 'crash' | 'hazard' | 'closure' | 'traffic';
+
+/** Something worth warning the driver about, positioned along the route. */
+export type RoadAlert = {
+  id: string;
+  kind: RoadAlertKind;
+  coordinate: Coordinate;
+  /** Posted limit at a camera, where OSM records one. */
+  limitKmh?: number | null;
+  note?: string;
+  /** Distance from the route start, filled in once matched to a route. */
+  distanceAlongM?: number;
+  source: 'osm' | 'local';
 };
 
 export type RouteAlternative = {
@@ -110,12 +138,22 @@ export type RouteResponse = {
   alternatives: RouteAlternative[];
 };
 
+export type HazardKind = 'police' | 'crash' | 'hazard' | 'closure' | 'camera' | 'traffic';
+
 export type HazardReport = {
   id: string;
-  kind: 'police' | 'hazard' | 'closure' | 'camera';
+  kind: HazardKind;
   note?: string;
   coordinate: Coordinate;
   createdAt: string;
+};
+
+/** A recorded GPS track, exportable as GPX. */
+export type TrackPoint = {
+  coordinate: Coordinate;
+  /** Epoch milliseconds. */
+  at: number;
+  speedKmh?: number;
 };
 
 export type ChargerSite = {

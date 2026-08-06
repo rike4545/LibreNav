@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import maplibregl, { GeoJSONSource, LngLatBoundsLike, Map, MapMouseEvent, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { appEnv, resolveMapStyleUrl } from '@/lib/config';
+import { TERRAIN_DEM_URL, appEnv, resolveMapStyleUrl } from '@/lib/config';
 import { boundsOf } from '@/lib/geometry';
-import { ChargerSite, Coordinate, HazardReport, Place, RouteResponse, UserPosition, Waypoint } from '@/types/map';
+import { ChargerSite, Coordinate, HazardReport, Place, RoadAlert, RouteResponse, UserPosition, Waypoint } from '@/types/map';
 
 type Props = {
   center: Coordinate;
@@ -16,6 +16,8 @@ type Props = {
   chargers: ChargerSite[];
   places: Place[];
   reports: HazardReport[];
+  alerts: RoadAlert[];
+  terrain3d: boolean;
   userPosition: UserPosition | null;
   /** Snapped position during navigation; keeps the puck on the road. */
   snappedPosition: Coordinate | null;
@@ -38,8 +40,11 @@ const SOURCES = {
   alternatives: 'alternatives-src',
   chargers: 'chargers-src',
   places: 'places-src',
-  reports: 'reports-src'
+  reports: 'reports-src',
+  alerts: 'alerts-src'
 } as const;
+
+const TERRAIN_SOURCE = 'terrain-dem';
 
 const emptyCollection = (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
@@ -60,7 +65,8 @@ const OVERLAY_LAYERS = [
   'chargers-cluster-count',
   'chargers-point',
   'places-point',
-  'reports-point'
+  'reports-point',
+  'alerts-point'
 ];
 
 /**
@@ -86,6 +92,8 @@ export function NavMap({
   chargers,
   places,
   reports,
+  alerts,
+  terrain3d,
   userPosition,
   snappedPosition,
   navActive,
@@ -109,8 +117,8 @@ export function NavMap({
   const handlersRef = useRef({ onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange });
   handlersRef.current = { onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange };
 
-  const dataRef = useRef({ route, activeAlternativeId, chargers, places, reports });
-  dataRef.current = { route, activeAlternativeId, chargers, places, reports };
+  const dataRef = useRef({ route, activeAlternativeId, chargers, places, reports, alerts });
+  dataRef.current = { route, activeAlternativeId, chargers, places, reports, alerts };
 
   /**
    * Push the current data into every source.
@@ -126,7 +134,7 @@ export function NavMap({
       source?.setData(data);
     };
 
-    const { route: current, activeAlternativeId: activeId, chargers: pins, places: pois, reports: hazards } = dataRef.current;
+    const { route: current, activeAlternativeId: activeId, chargers: pins, places: pois, reports: hazards, alerts: warnings } = dataRef.current;
 
     if (!current) {
       set(SOURCES.route, emptyCollection());
@@ -171,6 +179,15 @@ export function NavMap({
         type: 'Feature',
         properties: { id: report.id, kind: report.kind },
         geometry: { type: 'Point', coordinates: [report.coordinate.lng, report.coordinate.lat] }
+      }))
+    });
+
+    set(SOURCES.alerts, {
+      type: 'FeatureCollection',
+      features: warnings.map((alert) => ({
+        type: 'Feature',
+        properties: { id: alert.id, kind: alert.kind },
+        geometry: { type: 'Point', coordinates: [alert.coordinate.lng, alert.coordinate.lat] }
       }))
     });
   }, []);
@@ -285,10 +302,33 @@ export function NavMap({
       type: 'circle',
       source: SOURCES.reports,
       paint: {
-        'circle-color': '#fb923c',
+        'circle-color': [
+          'match',
+          ['get', 'kind'],
+          'police', '#38bdf8',
+          'crash', '#f43f5e',
+          'closure', '#f43f5e',
+          'traffic', '#fb923c',
+          'camera', '#a855f7',
+          '#f59e0b'
+        ],
         'circle-radius': 7,
         'circle-stroke-width': 2,
         'circle-stroke-color': 'rgba(255,255,255,0.85)'
+      }
+    });
+
+    /* ------------------------------------------- speed cameras and alerts */
+    map.addSource(SOURCES.alerts, { type: 'geojson', data: emptyCollection() });
+    map.addLayer({
+      id: 'alerts-point',
+      type: 'circle',
+      source: SOURCES.alerts,
+      paint: {
+        'circle-color': ['match', ['get', 'kind'], 'speed-camera', '#f59e0b', 'police', '#38bdf8', 'crash', '#f43f5e', '#fb923c'],
+        'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 4, 15, 8],
+        'circle-stroke-width': 2,
+        'circle-stroke-color': 'rgba(255,255,255,0.9)'
       }
     });
 
@@ -330,6 +370,18 @@ export function NavMap({
       });
       map.on('mouseleave', layer, () => {
         map.getCanvas().style.cursor = '';
+      });
+    }
+
+    if (!map.getSource(TERRAIN_SOURCE)) {
+      map.addSource(TERRAIN_SOURCE, {
+        type: 'raster-dem',
+        tiles: [TERRAIN_DEM_URL],
+        tileSize: 256,
+        // Terrarium packs elevation into RGB differently from Mapbox's scheme.
+        encoding: 'terrarium',
+        maxzoom: 13,
+        attribution: 'Elevation: AWS Terrain Tiles'
       });
     }
 

@@ -10,25 +10,34 @@ import {
   Loader2,
   LocateFixed,
   Navigation,
+  Circle,
+  Coffee,
+  Mountain,
   Route as RouteIcon,
   Settings2,
   ShieldAlert,
+  Square,
   Star,
   Zap
 } from 'lucide-react';
 import Link from 'next/link';
+import { AlertBanner } from '@/components/AlertBanner';
 import { ChargerCard } from '@/components/ChargerCard';
 import { ManeuverIcon } from '@/components/ManeuverIcon';
 import { NavMap } from '@/components/NavMap';
 import { NavPanel } from '@/components/NavPanel';
+import { ReportSheet } from '@/components/ReportSheet';
 import { SearchPanel } from '@/components/SearchPanel';
 import { SettingsPanel } from '@/components/SettingsPanel';
+import { SpeedPanel } from '@/components/SpeedPanel';
 import { MAP_STYLES, appEnv } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
 import { haversineMeters } from '@/lib/geometry';
-import { NavIndex, NavProgress, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock } from '@/lib/nav';
+import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
+import { fetchSpeedCameras, positionAlertsOnRoute } from '@/lib/services/alerts';
 import { reverseGeocode } from '@/lib/services/geocode';
 import { fetchChargers, fetchPlacesAlongRoute, fetchPlacesNear } from '@/lib/services/overpass';
+import { fetchSpeedLimits, limitAtIndex } from '@/lib/services/roadinfo';
 import { RoutingError, fetchRoute } from '@/lib/services/routing';
 import {
   Preferences,
@@ -48,13 +57,18 @@ import {
   setPlaceRole,
   toggleSavedPlace
 } from '@/lib/storage';
+import { downloadGpx, trackDistanceKm } from '@/lib/gpx';
 import { decodeTrip, encodeTrip, estimateRange } from '@/lib/trip';
 import { primeSpeech, speak, stopSpeaking } from '@/lib/voice';
 import { cn, formatDistanceKm, formatDurationMin } from '@/lib/utils';
 import {
   ChargerSite,
   Coordinate,
+  HazardKind,
   HazardReport,
+  RoadAlert,
+  SpeedLimitSpan,
+  TrackPoint,
   Place,
   PlaceCategoryId,
   RouteOptions,
@@ -102,6 +116,12 @@ export function MapShell() {
   const [chargerError, setChargerError] = useState(false);
   const [chargerAttempt, setChargerAttempt] = useState(0);
 
+  const [speedLimits, setSpeedLimits] = useState<SpeedLimitSpan[]>([]);
+  const [cameras, setCameras] = useState<RoadAlert[]>([]);
+  const [reportOpen, setReportOpen] = useState(false);
+  const [track, setTrack] = useState<TrackPoint[]>([]);
+  const [recording, setRecording] = useState(false);
+
   const [panelOpen, setPanelOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -118,6 +138,7 @@ export function MapShell() {
   const pendingDestinationRef = useRef<Waypoint | null>(null);
   const warnedNoOriginRef = useRef(false);
   const lastChargerFetchRef = useRef<Coordinate | null>(null);
+  const announcedAlertsRef = useRef(new Set<string>());
 
   const destination = waypoints.length > 1 ? waypoints[waypoints.length - 1] : null;
 
@@ -254,6 +275,58 @@ export function MapShell() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopsKey, options]);
 
+  /* ------------------------------- road data for the current route */
+  useEffect(() => {
+    if (!route) {
+      setSpeedLimits([]);
+      setCameras([]);
+      return;
+    }
+
+    const controller = new AbortController();
+    announcedAlertsRef.current.clear();
+
+    // Both are per-route one-shots, not per-tick work.
+    fetchSpeedLimits(route.legs, controller.signal)
+      .then(setSpeedLimits)
+      .catch(() => setSpeedLimits([]));
+
+    fetchSpeedCameras(route.coordinates, 0.4, controller.signal)
+      .then(setCameras)
+      .catch(() => setCameras([]));
+
+    return () => controller.abort();
+  }, [route]);
+
+  /**
+   * Everything worth warning about, placed along the route in order: OSM speed
+   * cameras plus the driver's own reports.
+   */
+  const routeAlerts = useMemo(() => {
+    if (!route || !navIndexRef.current) return [];
+    const local: RoadAlert[] = reports.map((report) => ({
+      id: report.id,
+      kind: report.kind === 'camera' ? 'speed-camera' : report.kind,
+      coordinate: report.coordinate,
+      note: report.note,
+      source: 'local'
+    }));
+    return positionAlertsOnRoute([...cameras, ...local], route.coordinates, navIndexRef.current.cumulative);
+  }, [route, cameras, reports, speedLimits]);
+
+  /** Posted limit where the driver currently is. */
+  const currentLimitKmh = useMemo(() => {
+    if (!navActive || !progress || !speedLimits.length) return null;
+    return limitAtIndex(speedLimits, progress.shapeIndex)?.limitKmh ?? null;
+  }, [navActive, progress, speedLimits]);
+
+  /** The alert being approached, if any. */
+  const upcomingAlert = useMemo(() => {
+    if (!navActive || !progress || !navIndexRef.current) return null;
+    const travelled = navIndexRef.current.totalM - progress.remainingDistanceM;
+    return nextAlertAhead(routeAlerts, travelled);
+  }, [navActive, progress, routeAlerts]);
+
   /* ------------------------------------------- navigation progress loop */
   useEffect(() => {
     if (!navActive || !route || !userPosition || !navIndexRef.current) return;
@@ -280,6 +353,17 @@ export function MapShell() {
       const line = announcementFor(maneuver, next.distanceToManeuverM, announcedRef.current, preferences.imperial);
       if (line) speak(line, { interrupt: next.distanceToManeuverM < 120 });
     }
+
+    // Cameras and hazards get their own callout, once each on approach.
+    if (preferences.voiceGuidance && upcomingAlert) {
+      const warning = alertAnnouncement(
+        upcomingAlert.alert,
+        upcomingAlert.distanceM,
+        announcedAlertsRef.current,
+        preferences.imperial
+      );
+      if (warning) speak(warning);
+    }
   }, [navActive, route, userPosition, preferences.voiceGuidance, preferences.imperial, rerouting]);
 
   /* --------------------------------------------------------- rerouting */
@@ -303,6 +387,17 @@ export function MapShell() {
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, navActive, userPosition]);
+
+  /* ------------------------------------------------- GPS track recording */
+  useEffect(() => {
+    if (!recording || !userPosition) return;
+    setTrack((current) => {
+      const last = current[current.length - 1];
+      // Drop near-duplicate fixes so a parked car doesn't bloat the GPX.
+      if (last && haversineMeters(last.coordinate, userPosition.coordinate) < 5) return current;
+      return [...current, { coordinate: userPosition.coordinate, at: Date.now(), speedKmh: userPosition.speedKmh }];
+    });
+  }, [recording, userPosition]);
 
   /* ---------------------------------------------------------- chargers */
   useEffect(() => {
@@ -522,7 +617,7 @@ export function MapShell() {
     }
   }
 
-  function handleReport(kind: HazardReport['kind']) {
+  function handleReport(kind: HazardKind) {
     const report: HazardReport = {
       id: `${Date.now()}-${kind}`,
       kind,
@@ -530,7 +625,29 @@ export function MapShell() {
       createdAt: new Date().toISOString()
     };
     setReports(saveReport(report));
-    showToast('Hazard saved on this device.');
+    setReportOpen(false);
+    showToast('Report saved on this device.');
+  }
+
+  function toggleRecording() {
+    if (recording) {
+      setRecording(false);
+      if (track.length > 1) {
+        downloadGpx(track, `LibreNav ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`);
+        showToast(`Exported ${track.length} points (${formatDistanceKm(trackDistanceKm(track), preferences.imperial)}).`);
+      } else {
+        showToast('Track too short to export.');
+      }
+      setTrack([]);
+      return;
+    }
+    if (!userPosition) {
+      showToast('Waiting for GPS — recording needs your position.');
+      return;
+    }
+    setTrack([]);
+    setRecording(true);
+    showToast('Recording track.');
   }
 
   function updatePreferences(next: Preferences) {
@@ -569,6 +686,8 @@ export function MapShell() {
         chargers={visibleChargers}
         places={places}
         reports={reports}
+        alerts={routeAlerts}
+        terrain3d={preferences.terrain3d}
         userPosition={userPosition}
         snappedPosition={navActive ? progress?.snapped ?? null : null}
         navActive={navActive}
@@ -602,6 +721,12 @@ export function MapShell() {
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
               <span className="text-sm font-semibold">{appEnv.appName}</span>
               {geoDenied ? <span className="text-xs text-amber-300">GPS off</span> : null}
+              {recording ? (
+                <span className="flex items-center gap-1.5 text-xs text-rose-300">
+                  <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
+                  {track.length ? formatDistanceKm(trackDistanceKm(track), preferences.imperial) : 'REC'}
+                </span>
+              ) : null}
               {chargerError && preferences.showChargers ? (
                 <span className="text-xs text-amber-300" title="Every Overpass mirror failed to respond.">
                   Chargers unavailable
@@ -610,6 +735,16 @@ export function MapShell() {
             </div>
 
             <div className="pointer-events-auto flex items-center gap-2">
+              <a
+                href="https://buymeacoffee.com/myevcompanionapp"
+                target="_blank"
+                rel="noreferrer noopener"
+                aria-label="Support this project"
+                title="Support this project"
+                className="rounded-full border border-amber-400/40 bg-amber-500/15 p-2.5 text-amber-200 shadow-panel backdrop-blur transition hover:bg-amber-500/25"
+              >
+                <Coffee className="h-4 w-4" />
+              </a>
               <Link
                 href="/discounts"
                 aria-label="Discounts"
@@ -617,6 +752,35 @@ export function MapShell() {
               >
                 <BadgePercent className="h-4 w-4" />
               </Link>
+              <button
+                type="button"
+                onClick={toggleRecording}
+                aria-label={recording ? 'Stop recording and export GPX' : 'Record GPS track'}
+                title={recording ? 'Stop and export GPX' : 'Record GPS track'}
+                className={cn(
+                  'rounded-full border p-2.5 shadow-panel backdrop-blur transition',
+                  recording
+                    ? 'border-rose-400/60 bg-rose-500/25 text-rose-200 hover:bg-rose-500/35'
+                    : 'border-border bg-slate-900/90 text-slate-300 hover:bg-slate-800'
+                )}
+              >
+                {recording ? <Square className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
+              </button>
+              <button
+                type="button"
+                onClick={() => updatePreferences({ ...preferences, terrain3d: !preferences.terrain3d })}
+                aria-label="Toggle 3D terrain"
+                aria-pressed={preferences.terrain3d}
+                title="3D terrain"
+                className={cn(
+                  'rounded-full border p-2.5 shadow-panel backdrop-blur transition',
+                  preferences.terrain3d
+                    ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200'
+                    : 'border-border bg-slate-900/90 text-slate-300 hover:bg-slate-800'
+                )}
+              >
+                <Mountain className="h-4 w-4" />
+              </button>
               <button
                 type="button"
                 onClick={cycleMapStyle}
@@ -664,6 +828,34 @@ export function MapShell() {
         </>
       )}
 
+      {/* Speed + posted limit, and whatever is coming up on the road */}
+      {navActive ? (
+        <>
+          <div className="absolute bottom-6 left-4 z-30">
+            <SpeedPanel
+              speedKmh={userPosition && userPosition.speedKmh > 1 ? userPosition.speedKmh : null}
+              limitKmh={currentLimitKmh}
+              imperial={preferences.imperial}
+            />
+          </div>
+          {preferences.alertsEnabled && upcomingAlert ? (
+            <div className="pointer-events-none absolute bottom-6 left-1/2 z-30 -translate-x-1/2">
+              <AlertBanner
+                alert={upcomingAlert.alert}
+                distanceM={upcomingAlert.distanceM}
+                imperial={preferences.imperial}
+              />
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {reportOpen ? (
+        <div className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2">
+          <ReportSheet onReport={handleReport} onClose={() => setReportOpen(false)} />
+        </div>
+      ) : null}
+
       {selectedCharger ? (
         <div className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2 lg:left-auto lg:right-4 lg:translate-x-0">
           <ChargerCard
@@ -705,7 +897,7 @@ export function MapShell() {
         </div>
       ) : null}
 
-      {!navActive && !selectedCharger ? (
+      {!navActive && !selectedCharger && !reportOpen ? (
         <div className="absolute inset-x-0 bottom-0 z-20 px-2 pb-2">
           <div className="mx-auto w-[min(60rem,100%)] rounded-[1.75rem] border border-border bg-slate-900/95 p-4 shadow-panel backdrop-blur">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -783,7 +975,7 @@ export function MapShell() {
                     {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
                   </IconButton>
                 ) : null}
-                <IconButton label="Hazard" onClick={() => handleReport('hazard')}>
+                <IconButton label="Report" onClick={() => setReportOpen(true)}>
                   <ShieldAlert className="h-4 w-4" />
                 </IconButton>
 

@@ -32,6 +32,13 @@ export const MAP_STYLES: MapStyleOption[] = [
   { id: 'bright', label: 'Bright', url: 'https://tiles.openfreemap.org/styles/bright', dark: false }
 ];
 
+/**
+ * Terrarium-encoded elevation tiles from the AWS Open Data registry
+ * (originally Mapzen). Open licence, no key, and MapLibre reads the encoding
+ * natively — which is what makes a 3D terrain mode possible without a vendor.
+ */
+export const TERRAIN_DEM_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png';
+
 export const DEFAULT_ENDPOINTS: Endpoints = {
   // FOSSGIS runs the public Valhalla instance for OSM. Fair-use, no key.
   valhallaUrl: process.env.NEXT_PUBLIC_VALHALLA_URL || 'https://valhalla1.openstreetmap.de',

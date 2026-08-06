@@ -1,11 +1,11 @@
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { ArrowLeft, ArrowUpRight, BadgePercent, ExternalLink, Link2, TicketPercent } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, BadgePercent, Coffee, ExternalLink, Link2, TicketPercent } from 'lucide-react';
 import { discountSections, discountSummary } from '@/lib/discounts';
 
 export const metadata: Metadata = {
-  title: 'Discounts | OpenNav',
-  description: 'Charging memberships, trip-planning links, and other savings resources for OpenNav drivers.'
+  title: 'Discounts | LibreNav',
+  description: 'Charging memberships, trip-planning links, and other savings resources for LibreNav drivers.'
 };
 
 const badgeStyles: Record<string, string> = {
@@ -28,19 +28,30 @@ export default function DiscountsPage() {
               <ArrowLeft className="h-4 w-4" />
               Back to map
             </Link>
-            <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/25 bg-sky-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-sky-100">
-              <BadgePercent className="h-4 w-4" />
-              Discounts hub
+            <div className="flex flex-wrap items-center gap-2">
+              <a
+                href="https://buymeacoffee.com/myevcompanionapp"
+                target="_blank"
+                rel="noreferrer noopener"
+                className="inline-flex items-center gap-2 rounded-full border border-amber-400/40 bg-amber-500/15 px-4 py-2 text-sm font-semibold text-amber-100 transition hover:bg-amber-500/25"
+              >
+                <Coffee className="h-4 w-4" />
+                Support this project
+              </a>
+              <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/25 bg-sky-500/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.22em] text-sky-100">
+                <BadgePercent className="h-4 w-4" />
+                Discounts hub
+              </div>
             </div>
           </div>
 
           <div className="mt-8 grid gap-6 lg:grid-cols-[minmax(0,1.25fr)_minmax(0,0.75fr)]">
             <section>
               <div className="max-w-3xl">
-                <div className="text-xs uppercase tracking-[0.28em] text-slate-400">OpenNav savings</div>
+                <div className="text-xs uppercase tracking-[0.28em] text-slate-400">LibreNav savings</div>
                 <h1 className="mt-3 text-4xl font-semibold tracking-tight text-white">Useful savings links, without the clutter.</h1>
                 <p className="mt-4 text-base leading-7 text-slate-300">
-                  This hub keeps charging memberships, trip-planning tools, and future OpenNav partner offers in one place.
+                  This hub keeps charging memberships, trip-planning tools, and future LibreNav partner offers in one place.
                   App-specific promo codes are only shown when they exist.
                 </p>
                 <div className="mt-5 flex flex-wrap gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-slate-200">
