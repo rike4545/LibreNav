@@ -41,9 +41,8 @@ export function AlertBanner({ alert, distanceM, imperial }: Props) {
           {imperial ? `${Math.round(alert.limitKmh * 0.621371)} mph` : `${alert.limitKmh} km/h`}
         </span>
       ) : null}
-      {alert.source === 'local' ? (
-        <span className="text-[10px] uppercase tracking-wider opacity-60">yours</span>
-      ) : null}
+      {alert.source === 'local' ? <span className="text-[10px] uppercase tracking-wider opacity-60">yours</span> : null}
+      {alert.source === 'waze' ? <span className="text-[10px] uppercase tracking-wider opacity-60">live</span> : null}
     </div>
   );
 }

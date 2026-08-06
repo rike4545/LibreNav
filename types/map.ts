@@ -117,7 +117,19 @@ export type RoadAlert = {
   note?: string;
   /** Distance from the route start, filled in once matched to a route. */
   distanceAlongM?: number;
-  source: 'osm' | 'local';
+  source: 'osm' | 'local' | 'waze';
+};
+
+/** A slow-traffic segment from the live Waze feed. */
+export type TrafficJam = {
+  id: string;
+  /** Waze congestion level, 1 (light) to 5 (standstill). */
+  level: number;
+  speedKmh: number | null;
+  lengthM: number | null;
+  towards?: string;
+  /** [lng, lat] pairs. */
+  coordinates: [number, number][];
 };
 
 export type RouteAlternative = {

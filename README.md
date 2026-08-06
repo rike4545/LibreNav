@@ -40,6 +40,12 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Filter out chargers below a power threshold
 - Range estimate against your vehicle profile, with a warning and a one-tap "find chargers along this route"
 
+**Live traffic (optional, your own key)**
+- Waze jams drawn along the road, coloured by congestion level
+- Waze police, crash, closure, and hazard reports announced on approach like any other alert
+- Business search results — ratings, opening status, addresses — merged into search ahead of OSM
+- Your key is stored only in your browser; it is never committed or built into the app
+
 **Reporting and tracks**
 - Report police, crashes, traffic, hazards, closures, or cameras at your location
 - Reports show on the map by type, alert you on approach, and expire after a day
@@ -78,6 +84,7 @@ the browser directly against public, CORS-enabled OSM services in `lib/services/
 | Speed limits | Valhalla `trace_attributes` | one call per route, `edge_walk` |
 | Speed cameras | Overpass | `highway=speed_camera` along the route |
 | Elevation | AWS Terrain Tiles | Terrarium DEM, open data |
+| Live traffic (optional) | OpenWeb Ninja | licensed Waze feed, your key, browser-side |
 
 This is what makes the public link work for anyone who opens it, and it's also why the app has no
 signup: there is no backend to sign up to.
@@ -108,6 +115,19 @@ Use the local dev server (`npm run dev`) when running a self-hosted stack, not t
 You can also bake different defaults in at build time with `NEXT_PUBLIC_VALHALLA_URL`,
 `NEXT_PUBLIC_PHOTON_URL`, `NEXT_PUBLIC_OVERPASS_URL`, and `NEXT_PUBLIC_MAP_STYLE_URL`.
 
+## Optional: live traffic and richer places
+
+**Settings → Place data key** accepts an [OpenWeb Ninja](https://www.openwebninja.com) key, which
+unlocks the licensed Waze feed (jams and alerts) and Google-sourced business results.
+
+The key is deliberately **not** an environment variable and is never committed. LibreNav is a static
+export, so anything compiled in is readable by every visitor and by anyone reading this repository —
+rotating it would not help, because the replacement is equally visible. The key therefore lives only
+in your browser's `localStorage`, and the app degrades to the keyless OSM stack without one.
+
+That endpoint is metered and can be slow. LibreNav polls it at most every three minutes, backs off
+for ten minutes on a quota error, and never lets it block navigation.
+
 ## Deploying
 
 Pushing to `main` triggers `.github/workflows/deploy.yml`, which runs a static export and publishes
@@ -121,7 +141,9 @@ To deploy your own fork, enable Pages (Settings → Pages → Source: GitHub Act
 
 Worth knowing before you rely on it:
 
-- **No live traffic.** ETAs come from Valhalla's speed model, not current conditions.
+- **No live traffic by default.** ETAs come from Valhalla's speed model, not current conditions.
+  Adding your own OpenWeb Ninja key turns on live Waze jams and alerts (see below), but ETAs still
+  come from Valhalla — congestion is drawn on the map, not folded into the arrival time.
 - **No live charger availability.** Charger details are OSM tags, which can be incomplete or stale.
 - **The range model is deliberately simple** — usable charge over a flat consumption rate. It ignores
   elevation, temperature, and speed. Treat it as a planning hint.
@@ -130,8 +152,10 @@ Worth knowing before you rely on it:
 - **Hazard reports are local only.** They stay in your browser and expire after 24 hours.
   LibreNav has no server, so there is nothing to share them with other drivers — this is not a
   community reporting network, and it will not behave like one.
-- **No live Waze data.** Waze reports are proprietary and only reachable through a private
-  endpoint, so LibreNav does not use them. Alerts here come from OpenStreetMap and from you.
+- **Waze data needs your own key.** Waze reports are proprietary, so LibreNav never scrapes them.
+  With an OpenWeb Ninja key in Settings you get the licensed feed; without one, alerts come from
+  OpenStreetMap and from you. Reports below a reliability score of 3 are dropped — a false "police
+  ahead" is worse than silence.
 - **Speed limits and cameras are only as good as OSM.** Many roads carry no `maxspeed` tag, and
   camera coverage varies enormously by country. Never treat either as authoritative.
 

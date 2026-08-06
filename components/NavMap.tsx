@@ -5,7 +5,7 @@ import maplibregl, { GeoJSONSource, LngLatBoundsLike, Map, MapMouseEvent, Marker
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { TERRAIN_DEM_URL, appEnv, resolveMapStyleUrl } from '@/lib/config';
 import { boundsOf } from '@/lib/geometry';
-import { ChargerSite, Coordinate, HazardReport, Place, RoadAlert, RouteResponse, UserPosition, Waypoint } from '@/types/map';
+import { ChargerSite, Coordinate, HazardReport, Place, RoadAlert, RouteResponse, TrafficJam, UserPosition, Waypoint } from '@/types/map';
 
 type Props = {
   center: Coordinate;
@@ -17,6 +17,7 @@ type Props = {
   places: Place[];
   reports: HazardReport[];
   alerts: RoadAlert[];
+  jams: TrafficJam[];
   terrain3d: boolean;
   userPosition: UserPosition | null;
   /** Snapped position during navigation; keeps the puck on the road. */
@@ -41,7 +42,8 @@ const SOURCES = {
   chargers: 'chargers-src',
   places: 'places-src',
   reports: 'reports-src',
-  alerts: 'alerts-src'
+  alerts: 'alerts-src',
+  jams: 'jams-src'
 } as const;
 
 const TERRAIN_SOURCE = 'terrain-dem';
@@ -61,6 +63,7 @@ const OVERLAY_LAYERS = [
   'route-casing',
   'route-line',
   'route-driven',
+  'jams-line',
   'chargers-cluster',
   'chargers-cluster-count',
   'chargers-point',
@@ -93,6 +96,7 @@ export function NavMap({
   places,
   reports,
   alerts,
+  jams,
   terrain3d,
   userPosition,
   snappedPosition,
@@ -117,8 +121,8 @@ export function NavMap({
   const handlersRef = useRef({ onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange });
   handlersRef.current = { onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange };
 
-  const dataRef = useRef({ route, activeAlternativeId, chargers, places, reports, alerts });
-  dataRef.current = { route, activeAlternativeId, chargers, places, reports, alerts };
+  const dataRef = useRef({ route, activeAlternativeId, chargers, places, reports, alerts, jams });
+  dataRef.current = { route, activeAlternativeId, chargers, places, reports, alerts, jams };
 
   /**
    * Push the current data into every source.
@@ -134,7 +138,7 @@ export function NavMap({
       source?.setData(data);
     };
 
-    const { route: current, activeAlternativeId: activeId, chargers: pins, places: pois, reports: hazards, alerts: warnings } = dataRef.current;
+    const { route: current, activeAlternativeId: activeId, chargers: pins, places: pois, reports: hazards, alerts: warnings, jams: congestion } = dataRef.current;
 
     if (!current) {
       set(SOURCES.route, emptyCollection());
@@ -179,6 +183,15 @@ export function NavMap({
         type: 'Feature',
         properties: { id: report.id, kind: report.kind },
         geometry: { type: 'Point', coordinates: [report.coordinate.lng, report.coordinate.lat] }
+      }))
+    });
+
+    set(SOURCES.jams, {
+      type: 'FeatureCollection',
+      features: congestion.map((jam) => ({
+        type: 'Feature',
+        properties: { id: jam.id, level: jam.level },
+        geometry: { type: 'LineString', coordinates: jam.coordinates }
       }))
     });
 
@@ -315,6 +328,21 @@ export function NavMap({
         'circle-radius': 7,
         'circle-stroke-width': 2,
         'circle-stroke-color': 'rgba(255,255,255,0.85)'
+      }
+    });
+
+    /* --------------------------------------------------- live traffic jams */
+    map.addSource(SOURCES.jams, { type: 'geojson', data: emptyCollection() });
+    map.addLayer({
+      id: 'jams-line',
+      type: 'line',
+      source: SOURCES.jams,
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: {
+        // Waze levels run 1 (light) to 5 (standstill) — amber through to red.
+        'line-color': ['step', ['get', 'level'], '#facc15', 3, '#f97316', 4, '#ef4444', 5, '#b91c1c'],
+        'line-width': ['interpolate', ['linear'], ['zoom'], 10, 3, 15, 7],
+        'line-opacity': 0.9
       }
     });
 

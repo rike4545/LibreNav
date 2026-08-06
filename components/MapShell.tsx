@@ -32,11 +32,13 @@ import { SettingsPanel } from '@/components/SettingsPanel';
 import { SpeedPanel } from '@/components/SpeedPanel';
 import { MAP_STYLES, appEnv } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
-import { haversineMeters } from '@/lib/geometry';
+import { boundsOf, haversineMeters } from '@/lib/geometry';
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
 import { fetchSpeedCameras, positionAlertsOnRoute } from '@/lib/services/alerts';
+import { WazeThrottled, fetchWazeTraffic } from '@/lib/services/waze';
 import { reverseGeocode } from '@/lib/services/geocode';
 import { fetchChargers, fetchPlacesAlongRoute, fetchPlacesNear } from '@/lib/services/overpass';
+import { hasLocalDataKey } from '@/lib/services/localdata';
 import { fetchSpeedLimits, limitAtIndex } from '@/lib/services/roadinfo';
 import { RoutingError, fetchRoute } from '@/lib/services/routing';
 import {
@@ -69,6 +71,7 @@ import {
   RoadAlert,
   SpeedLimitSpan,
   TrackPoint,
+  TrafficJam,
   Place,
   PlaceCategoryId,
   RouteOptions,
@@ -118,6 +121,9 @@ export function MapShell() {
 
   const [speedLimits, setSpeedLimits] = useState<SpeedLimitSpan[]>([]);
   const [cameras, setCameras] = useState<RoadAlert[]>([]);
+  const [liveAlerts, setLiveAlerts] = useState<RoadAlert[]>([]);
+  const [jams, setJams] = useState<TrafficJam[]>([]);
+  const [trafficThrottled, setTrafficThrottled] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [track, setTrack] = useState<TrackPoint[]>([]);
   const [recording, setRecording] = useState(false);
@@ -315,9 +321,52 @@ export function MapShell() {
     return () => controller.abort();
   }, [route]);
 
+  /* --------------------------------------------------------- live traffic */
+  useEffect(() => {
+    if (!route || !hasLocalDataKey()) {
+      setLiveAlerts([]);
+      setJams([]);
+      return;
+    }
+
+    const box = boundsOf(route.coordinates);
+    if (!box) return;
+    const bounds = {
+      southWest: { lat: box[0][1], lng: box[0][0] },
+      northEast: { lat: box[1][1], lng: box[1][0] }
+    };
+
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setInterval> | undefined;
+
+    setTrafficThrottled(false);
+    const load = () => {
+      fetchWazeTraffic(bounds, controller.signal)
+        .then((traffic) => {
+          setLiveAlerts(traffic.alerts);
+          setJams(traffic.jams);
+        })
+        .catch((cause: Error) => {
+          // Quota exhaustion is worth surfacing — otherwise stale traffic looks
+          // like clear roads. Other failures leave the last good data alone.
+          if (cause instanceof WazeThrottled) setTrafficThrottled(true);
+        });
+    };
+
+    load();
+    // Waze reports turn over quickly, but the endpoint is slow and metered —
+    // three minutes keeps it current without burning the user's quota.
+    timer = setInterval(load, 180_000);
+
+    return () => {
+      controller.abort();
+      if (timer) clearInterval(timer);
+    };
+  }, [route]);
+
   /**
    * Everything worth warning about, placed along the route in order: OSM speed
-   * cameras plus the driver's own reports.
+   * cameras, live Waze reports, and the driver's own.
    */
   const routeAlerts = useMemo(() => {
     if (!route || !navIndexRef.current) return [];
@@ -328,8 +377,12 @@ export function MapShell() {
       note: report.note,
       source: 'local'
     }));
-    return positionAlertsOnRoute([...cameras, ...local], route.coordinates, navIndexRef.current.cumulative);
-  }, [route, cameras, reports, speedLimits]);
+    return positionAlertsOnRoute(
+      [...cameras, ...liveAlerts, ...local],
+      route.coordinates,
+      navIndexRef.current.cumulative
+    );
+  }, [route, cameras, liveAlerts, reports, speedLimits]);
 
   /** Posted limit where the driver currently is. */
   const currentLimitKmh = useMemo(() => {
@@ -717,6 +770,7 @@ export function MapShell() {
         places={places}
         reports={reports}
         alerts={routeAlerts}
+        jams={jams}
         terrain3d={preferences.terrain3d}
         userPosition={userPosition}
         snappedPosition={navActive ? progress?.snapped ?? null : null}
@@ -755,6 +809,11 @@ export function MapShell() {
                 <span className="flex items-center gap-1.5 text-xs text-rose-300">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
                   {track.length ? formatDistanceKm(trackDistanceKm(track), preferences.imperial) : 'REC'}
+                </span>
+              ) : null}
+              {trafficThrottled ? (
+                <span className="text-xs text-amber-300" title="Live traffic quota reached; pausing requests.">
+                  Traffic paused
                 </span>
               ) : null}
               {chargerError && preferences.showChargers ? (
