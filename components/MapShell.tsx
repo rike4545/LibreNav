@@ -19,6 +19,7 @@ import {
   ShieldAlert,
   Square,
   Star,
+  XCircle,
   Zap
 } from 'lucide-react';
 import Link from 'next/link';
@@ -40,6 +41,7 @@ import { WazeThrottled, fetchWazeTraffic } from '@/lib/services/waze';
 import { reverseGeocode } from '@/lib/services/geocode';
 import { fetchChargers, fetchPlacesAlongRoute, fetchPlacesNear } from '@/lib/services/overpass';
 import { hasLocalDataKey } from '@/lib/services/localdata';
+import { LoopError, generateLoop } from '@/lib/services/loops';
 import { fetchSpeedLimits, limitAtIndex } from '@/lib/services/roadinfo';
 import { RoutingError, fetchRoute } from '@/lib/services/routing';
 import {
@@ -52,11 +54,13 @@ import {
   getRouteOptions,
   getSavedPlaces,
   getVehicle,
+  getVoiceSettings,
   pushRecent,
   savePreferences,
   saveReport,
   saveRouteOptions,
   saveVehicle,
+  saveVoiceSettings,
   setPlaceRole,
   toggleSavedPlace
 } from '@/lib/storage';
@@ -64,7 +68,7 @@ import { downloadGpx, trackDistanceKm } from '@/lib/gpx';
 import { estimateTrafficDelay } from '@/lib/traffic';
 import { StopWeather, fetchWeatherAt } from '@/lib/services/weather';
 import { decodeTrip, encodeTrip, estimateRange } from '@/lib/trip';
-import { primeSpeech, speak, stopSpeaking } from '@/lib/voice';
+import { VoiceSettings, configureVoice, primeSpeech, speak, stopSpeaking } from '@/lib/voice';
 import { releaseWakeLock, requestWakeLock } from '@/lib/wakelock';
 import { cn, formatDistanceKm, formatDurationMin } from '@/lib/utils';
 import {
@@ -129,9 +133,13 @@ export function MapShell() {
   const [jams, setJams] = useState<TrafficJam[]>([]);
   const [trafficThrottled, setTrafficThrottled] = useState(false);
   const [weather, setWeather] = useState<StopWeather | null>(null);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => getVoiceSettings());
   const [reportOpen, setReportOpen] = useState(false);
   const [track, setTrack] = useState<TrackPoint[]>([]);
   const [recording, setRecording] = useState(false);
+  const [loopKm, setLoopKm] = useState(40);
+  const [loopBusy, setLoopBusy] = useState(false);
+  const loopRotationRef = useRef(0);
 
   const [panelOpen, setPanelOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -159,6 +167,8 @@ export function MapShell() {
   }, []);
 
   useEffect(() => () => void releaseWakeLock(), []);
+
+  useEffect(() => configureVoice(voiceSettings), [voiceSettings]);
 
   /* ---------------------------------------------------------- theming */
   useEffect(() => {
@@ -654,6 +664,32 @@ export function MapShell() {
     [setDestination]
   );
 
+  /**
+   * Drop the trip entirely.
+   *
+   * Separate from ending guidance: stopping navigation keeps the route on
+   * screen so you can restart or review it, whereas this clears the plan.
+   */
+  function clearRoute() {
+    setNavActive(false);
+    setProgress(null);
+    stopSpeaking();
+    void releaseWakeLock();
+    setWaypoints([]);
+    setRoute(null);
+    setRouteError(null);
+    setActiveAlternativeId(null);
+    setSpeedLimits([]);
+    setCameras([]);
+    setLiveAlerts([]);
+    setJams([]);
+    setWeather(null);
+    navIndexRef.current = null;
+    announcedRef.current.clear();
+    announcedAlertsRef.current.clear();
+    setPanelOpen(true);
+  }
+
   function toggleNavigation() {
     if (navActive) {
       setNavActive(false);
@@ -707,6 +743,38 @@ export function MapShell() {
     setReports(saveReport(report));
     setReportOpen(false);
     showToast('Report saved on this device.');
+  }
+
+  /**
+   * Build a round trip from where we are.
+   *
+   * Rotating the ring each time means pressing again gives a genuinely
+   * different drive of the same length rather than the same one back.
+   */
+  async function makeLoop() {
+    const start = userPosition?.coordinate ?? mapCenter;
+    setLoopBusy(true);
+    loopRotationRef.current = (loopRotationRef.current + 73) % 360;
+
+    try {
+      const loop = await generateLoop(start, loopKm, options, loopRotationRef.current);
+      setWaypoints(loop.waypoints);
+      setPanelOpen(false);
+
+      // Dense street grids can't always produce a ring of the requested size.
+      // Say so rather than presenting a 10 km loop as though 15 km was asked.
+      const miss = Math.abs(loop.distanceKm - loopKm) / loopKm;
+      const actual = formatDistanceKm(loop.distanceKm, preferences.imperial);
+      showToast(
+        miss > 0.25
+          ? `Closest loop from here is ${actual} — try another distance or press again.`
+          : `Loop found: ${actual}`
+      );
+    } catch (cause) {
+      showToast(cause instanceof LoopError ? cause.message : 'Could not build a loop from here.');
+    } finally {
+      setLoopBusy(false);
+    }
   }
 
   function toggleRecording() {
@@ -833,6 +901,7 @@ export function MapShell() {
           rerouting={rerouting}
           onToggleVoice={() => updatePreferences({ ...preferences, voiceGuidance: !preferences.voiceGuidance })}
           onStop={toggleNavigation}
+          onCancel={clearRoute}
         />
       ) : (
         <>
@@ -990,6 +1059,8 @@ export function MapShell() {
             preferences={preferences}
             vehicle={vehicle}
             chargerNetworks={chargerNetworks}
+            voiceSettings={voiceSettings}
+            onVoiceSettingsChange={(next) => setVoiceSettings(saveVoiceSettings(next))}
             onPreferencesChange={updatePreferences}
             onVehicleChange={(next) => setVehicle(saveVehicle(next))}
             onClose={() => setSettingsOpen(false)}
@@ -1024,6 +1095,11 @@ export function MapShell() {
               onSetRole={(id, role) => setSaved(setPlaceRole(id, role))}
               onCategorySelect={handleCategory}
               onClearRecents={() => setRecents(clearRecents())}
+              loopKm={loopKm}
+              loopBusy={loopBusy}
+              onLoopKmChange={setLoopKm}
+              onGenerateLoop={() => void makeLoop()}
+              imperialLoop={preferences.imperial}
             />
 
             <div className="border-t border-line p-4">
@@ -1111,6 +1187,12 @@ export function MapShell() {
                 <IconButton label="Report" onClick={() => setReportOpen(true)}>
                   <ShieldAlert className="h-4 w-4" />
                 </IconButton>
+
+                {waypoints.length > 1 ? (
+                  <IconButton label="Cancel" onClick={clearRoute}>
+                    <XCircle className="h-4 w-4" />
+                  </IconButton>
+                ) : null}
 
                 {route ? (
                   <button

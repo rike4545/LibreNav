@@ -16,6 +16,7 @@ import {
   MapPin,
   ParkingSquare,
   Plus,
+  RefreshCw,
   Bike,
   Car,
   Footprints,
@@ -58,6 +59,11 @@ type Props = {
   onSetRole: (id: string, role: 'home' | 'work' | null) => void;
   onCategorySelect: (category: PlaceCategoryId | null, alongRoute: boolean) => void;
   onClearRecents: () => void;
+  loopKm: number;
+  loopBusy: boolean;
+  imperialLoop: boolean;
+  onLoopKmChange: (km: number) => void;
+  onGenerateLoop: () => void;
 };
 
 const MODES: Array<{ mode: TravelMode; label: string; icon: typeof Car }> = [
@@ -99,7 +105,12 @@ export function SearchPanel({
   onToggleSaved,
   onSetRole,
   onCategorySelect,
-  onClearRecents
+  onClearRecents,
+  loopKm,
+  loopBusy,
+  imperialLoop,
+  onLoopKmChange,
+  onGenerateLoop
 }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchFeature[]>([]);
@@ -408,6 +419,43 @@ export function SearchPanel({
               </div>
               </>
             ) : null}
+          </section>
+
+          <section className="mt-4 rounded-2xl border border-line bg-raised p-3">
+            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+              <RefreshCw className="h-3.5 w-3.5" />
+              Round trip
+            </div>
+            <p className="mt-1.5 text-xs text-subtle">
+              A loop from here and back — for a drive out, a meet, or a Sunday run.
+            </p>
+            <div className="mt-2.5 flex items-center gap-2">
+              <input
+                type="range"
+                min={5}
+                max={300}
+                step={5}
+                value={loopKm}
+                onChange={(event) => onLoopKmChange(Number(event.target.value))}
+                aria-label="Loop distance"
+                className="w-full accent-sky-500"
+              />
+              <span className="w-20 shrink-0 text-right text-sm font-semibold tabular-nums text-fg">
+                {formatDistanceKm(loopKm, imperialLoop)}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onGenerateLoop}
+              disabled={loopBusy}
+              className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:opacity-60"
+            >
+              {loopBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+              {loopBusy ? 'Finding a loop…' : 'Generate loop'}
+            </button>
+            <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+              Distance is approximate — roads rarely allow an exact loop. Press again for a different one.
+            </p>
           </section>
 
           {home || work ? (

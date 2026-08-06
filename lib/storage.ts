@@ -1,4 +1,5 @@
 import { DEFAULT_VEHICLE } from '@/lib/config';
+import { VoiceSettings, defaultVoiceSettings } from '@/lib/voice';
 import { HazardReport, RouteOptions, SearchFeature, VehicleProfile } from '@/types/map';
 
 const RECENTS_KEY = 'librenav.recents';
@@ -7,6 +8,7 @@ const REPORTS_KEY = 'librenav.reports';
 const OPTIONS_KEY = 'librenav.options';
 const PREFS_KEY = 'librenav.prefs';
 const VEHICLE_KEY = 'librenav.vehicle';
+const VOICE_KEY = 'librenav.voice';
 
 export type SavedPlace = SearchFeature & {
   /** 'home' and 'work' are pinned; everything else is a plain favorite. */
@@ -156,6 +158,15 @@ export function getPreferences(): Preferences {
 export function savePreferences(preferences: Preferences): Preferences {
   safeWrite(PREFS_KEY, preferences);
   return preferences;
+}
+
+export function getVoiceSettings(): VoiceSettings {
+  return { ...defaultVoiceSettings, ...safeRead<Partial<VoiceSettings>>(VOICE_KEY, {}) };
+}
+
+export function saveVoiceSettings(settings: VoiceSettings): VoiceSettings {
+  safeWrite(VOICE_KEY, settings);
+  return settings;
 }
 
 export function getVehicle(): VehicleProfile {

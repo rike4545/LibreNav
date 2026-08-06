@@ -24,6 +24,32 @@ export function bearingDegrees(a: Coordinate, b: Coordinate): number {
   return (Math.atan2(y, x) / DEG + 360) % 360;
 }
 
+/**
+ * Point reached by travelling `distanceM` from `origin` on `bearingDeg`.
+ * Great-circle form, so it stays accurate at high latitudes where a flat
+ * approximation would skew the shape of a generated loop.
+ */
+export function destinationPoint(origin: Coordinate, bearingDeg: number, distanceM: number): Coordinate {
+  const angular = distanceM / EARTH_RADIUS_M;
+  const bearing = bearingDeg * DEG;
+  const lat1 = origin.lat * DEG;
+  const lng1 = origin.lng * DEG;
+
+  const lat2 = Math.asin(Math.sin(lat1) * Math.cos(angular) + Math.cos(lat1) * Math.sin(angular) * Math.cos(bearing));
+  const lng2 =
+    lng1 +
+    Math.atan2(
+      Math.sin(bearing) * Math.sin(angular) * Math.cos(lat1),
+      Math.cos(angular) - Math.sin(lat1) * Math.sin(lat2)
+    );
+
+  return {
+    lat: lat2 / DEG,
+    // Keep longitude in −180..180 so a loop near the antimeridian stays valid.
+    lng: (((lng2 / DEG + 540) % 360) - 180)
+  };
+}
+
 export function compassPoint(bearing: number): string {
   const points = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
   return points[Math.round(bearing / 45) % 8];

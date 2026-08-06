@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
-import { BatteryCharging, Coffee, Globe, KeyRound, RotateCcw, Server, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { BatteryCharging, Coffee, Globe, KeyRound, Play, RotateCcw, Server, Volume2, X } from 'lucide-react';
 import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, getLocalDataKey, resetEndpoints, saveEndpoints, saveLocalDataKey } from '@/lib/config';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
 import { Preferences, ThemeChoice } from '@/lib/storage';
+import { VoiceSettings, listVoices, onVoicesChanged, previewVoice, speechSupported } from '@/lib/voice';
 import { cn } from '@/lib/utils';
 import { VehicleProfile } from '@/types/map';
 
@@ -13,12 +14,30 @@ type Props = {
   vehicle: VehicleProfile;
   /** Networks seen in the currently loaded chargers. */
   chargerNetworks: string[];
+  voiceSettings: VoiceSettings;
+  onVoiceSettingsChange: (settings: VoiceSettings) => void;
   onPreferencesChange: (preferences: Preferences) => void;
   onVehicleChange: (vehicle: VehicleProfile) => void;
   onClose: () => void;
 };
 
-export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPreferencesChange, onVehicleChange, onClose }: Props) {
+export function SettingsPanel({
+  preferences,
+  vehicle,
+  chargerNetworks,
+  voiceSettings,
+  onVoiceSettingsChange,
+  onPreferencesChange,
+  onVehicleChange,
+  onClose
+}: Props) {
+  // Voices populate asynchronously; the first getVoices() is usually empty.
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => listVoices());
+  useEffect(() => {
+    setVoices(listVoices());
+    return onVoicesChanged(() => setVoices(listVoices()));
+  }, []);
+
   const [endpoints, setEndpoints] = useState<Endpoints>(() => getEndpoints());
   const [saved, setSaved] = useState(false);
   const [localDataKey, setLocalDataKey] = useState(() => getLocalDataKey());
@@ -153,6 +172,71 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
             Connector and network come from OpenStreetMap tags, which are often missing — filtering will hide chargers
             that simply have not been tagged.
           </p>
+        </Section>
+
+        <Section title="Voice guidance" icon={<Volume2 className="h-4 w-4" />}>
+          {speechSupported() ? (
+            <>
+              <label className="block">
+                <span className="block text-xs font-medium text-muted">Voice</span>
+                <select
+                  value={voiceSettings.voiceUri ?? ''}
+                  onChange={(event) => onVoiceSettingsChange({ ...voiceSettings, voiceUri: event.target.value || null })}
+                  className="mt-1 w-full rounded-lg border border-line bg-raised px-2.5 py-2 text-sm text-fg outline-none focus:border-sky-400"
+                >
+                  <option value="">Best available for your language</option>
+                  {voices.map((voice) => (
+                    <option key={voice.voiceURI} value={voice.voiceURI}>
+                      {voice.name} ({voice.lang}){voice.localService ? '' : ' — online'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <RangeField
+                label="Speed"
+                value={voiceSettings.rate}
+                min={0.6}
+                max={1.6}
+                step={0.05}
+                format={(v) => `${v.toFixed(2)}×`}
+                onChange={(rate) => onVoiceSettingsChange({ ...voiceSettings, rate })}
+              />
+              <RangeField
+                label="Pitch"
+                value={voiceSettings.pitch}
+                min={0.5}
+                max={1.5}
+                step={0.05}
+                format={(v) => v.toFixed(2)}
+                onChange={(pitch) => onVoiceSettingsChange({ ...voiceSettings, pitch })}
+              />
+              <RangeField
+                label="Volume"
+                value={voiceSettings.volume}
+                min={0}
+                max={1}
+                step={0.05}
+                format={(v) => `${Math.round(v * 100)}%`}
+                onChange={(volume) => onVoiceSettingsChange({ ...voiceSettings, volume })}
+              />
+
+              <button
+                type="button"
+                onClick={previewVoice}
+                className="mt-3 flex items-center gap-2 rounded-full border border-line bg-raised px-4 py-2 text-sm font-medium text-muted transition hover:bg-strong"
+              >
+                <Play className="h-3.5 w-3.5" />
+                Test voice
+              </button>
+              <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+                Voices come from your device. The ones marked online need a connection — pick a local
+                voice if you drive where signal drops.
+              </p>
+            </>
+          ) : (
+            <p className="text-xs text-subtle">This browser has no speech synthesis, so voice guidance is unavailable.</p>
+          )}
         </Section>
 
         <Section title="Vehicle" icon={<BatteryCharging className="h-4 w-4" />}>
@@ -376,6 +460,42 @@ function SelectField({
           </option>
         ))}
       </select>
+    </label>
+  );
+}
+
+function RangeField({
+  label,
+  value,
+  min,
+  max,
+  step,
+  format,
+  onChange
+}: {
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  step: number;
+  format: (value: number) => string;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="mt-3 block">
+      <span className="flex items-center justify-between text-xs font-medium text-muted">
+        {label}
+        <span className="tabular-nums text-subtle">{format(value)}</span>
+      </span>
+      <input
+        type="range"
+        value={value}
+        min={min}
+        max={max}
+        step={step}
+        onChange={(event) => onChange(Number(event.target.value))}
+        className="mt-1 w-full accent-sky-500"
+      />
     </label>
   );
 }

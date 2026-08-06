@@ -1,6 +1,6 @@
 'use client';
 
-import { AlertTriangle, Volume2, VolumeX, X } from 'lucide-react';
+import { AlertTriangle, Pause, Volume2, VolumeX, X } from 'lucide-react';
 import { ManeuverIcon } from '@/components/ManeuverIcon';
 import { NavProgress, formatDistanceM, formatDuration, formatEtaClock } from '@/lib/nav';
 import { cn, formatSpeed } from '@/lib/utils';
@@ -15,9 +15,10 @@ type Props = {
   rerouting: boolean;
   onToggleVoice: () => void;
   onStop: () => void;
+  onCancel: () => void;
 };
 
-export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rerouting, onToggleVoice, onStop }: Props) {
+export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rerouting, onToggleVoice, onStop, onCancel }: Props) {
   const step = progress ? route.maneuvers[progress.stepIndex] : route.maneuvers[0];
   const next = progress ? route.maneuvers[progress.stepIndex + 1] : route.maneuvers[1];
   if (!step) return null;
@@ -74,10 +75,22 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
             >
               {voiceOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 text-subtle" />}
             </button>
+            {/* Two different intents: pause guidance but keep the route, or
+                drop the trip entirely. */}
             <button
               type="button"
               onClick={onStop}
-              aria-label="End navigation"
+              aria-label="End guidance, keep route"
+              title="End guidance"
+              className="rounded-full border border-line bg-raised p-2.5 text-muted transition hover:bg-strong"
+            >
+              <Pause className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={onCancel}
+              aria-label="Cancel route"
+              title="Cancel route"
               className="rounded-full border border-rose-500/40 bg-rose-500/20 p-2.5 text-rose-200 transition hover:bg-rose-500/30"
             >
               <X className="h-5 w-5" />
