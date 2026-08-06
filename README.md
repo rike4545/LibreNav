@@ -25,6 +25,8 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Speed camera warnings on approach, with the posted limit where OSM records one
 - Hazard reports placed along your route, announced once as you come up on them
 - Optional 3D terrain from open elevation tiles
+- Screen stays awake while navigating
+- Drive, truck, bike, and walk modes, each with its own routing costs
 
 **Search and places**
 - Debounced autocomplete with location bias, so "main street" resolves near you
@@ -40,8 +42,14 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Filter out chargers below a power threshold
 - Range estimate against your vehicle profile, with a warning and a one-tap "find chargers along this route"
 
+**Trip conditions**
+- Weather at your destination for the time you actually arrive, not the time you leave
+- Warnings for ice, snow, poor visibility, heavy rain, and strong wind
+- Installable, and opens without a signal once cached
+
 **Live traffic (optional, your own key)**
 - Waze jams drawn along the road, coloured by congestion level
+- Jams on your route add a visible "+N min traffic" to the arrival time
 - Waze police, crash, closure, and hazard reports announced on approach like any other alert
 - Business search results — ratings, opening status, addresses — merged into search ahead of OSM
 - Your key is stored only in your browser; it is never committed or built into the app
@@ -85,6 +93,7 @@ the browser directly against public, CORS-enabled OSM services in `lib/services/
 | Speed cameras | Overpass | `highway=speed_camera` along the route |
 | Elevation | AWS Terrain Tiles | Terrarium DEM, open data |
 | Live traffic (optional) | OpenWeb Ninja | licensed Waze feed, your key, browser-side |
+| Weather | Open-Meteo | keyless, forecast at arrival time |
 
 This is what makes the public link work for anyone who opens it, and it's also why the app has no
 signup: there is no backend to sign up to.
@@ -96,6 +105,9 @@ Key modules:
 - `lib/geometry.ts` — haversine, bearings, polyline decoding, windowed path snapping
 - `lib/trip.ts` — share-link encoding and the EV range model
 - `components/NavMap.tsx` — MapLibre layers, clustering, markers, and camera
+- `lib/traffic.ts` — turning jam speeds into a route delay
+- `lib/wakelock.ts` — keeping the screen on, reacquiring after the tab is hidden
+- `public/sw.js` — offline shell; deliberately never caches live data
 
 ## Self-hosting the data services
 
@@ -142,8 +154,10 @@ To deploy your own fork, enable Pages (Settings → Pages → Source: GitHub Act
 Worth knowing before you rely on it:
 
 - **No live traffic by default.** ETAs come from Valhalla's speed model, not current conditions.
-  Adding your own OpenWeb Ninja key turns on live Waze jams and alerts (see below), but ETAs still
-  come from Valhalla — congestion is drawn on the map, not folded into the arrival time.
+  Adding your own OpenWeb Ninja key turns on live Waze jams, and jams that lie on your route do
+  adjust the arrival time — shown separately as "+N min traffic" rather than folded in silently.
+  The delay assumes a 50 km/h free-flow baseline, since Valhalla reports one duration for the whole
+  route rather than per segment, so treat it as an estimate.
 - **No live charger availability.** Charger details are OSM tags, which can be incomplete or stale.
 - **The range model is deliberately simple** — usable charge over a flat consumption rate. It ignores
   elevation, temperature, and speed. Treat it as a planning hint.

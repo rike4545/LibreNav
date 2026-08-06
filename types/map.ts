@@ -12,7 +12,11 @@ export type SearchFeature = {
   kind?: string;
 };
 
+/** Valhalla costing models we expose. */
+export type TravelMode = 'auto' | 'truck' | 'motor_scooter' | 'bicycle' | 'pedestrian';
+
 export type RouteOptions = {
+  mode: TravelMode;
   avoidTolls: boolean;
   avoidHighways: boolean;
   avoidFerries: boolean;

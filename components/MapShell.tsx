@@ -11,6 +11,7 @@ import {
   LocateFixed,
   Navigation,
   Circle,
+  CloudSun,
   Coffee,
   Mountain,
   Route as RouteIcon,
@@ -60,8 +61,11 @@ import {
   toggleSavedPlace
 } from '@/lib/storage';
 import { downloadGpx, trackDistanceKm } from '@/lib/gpx';
+import { estimateTrafficDelay } from '@/lib/traffic';
+import { StopWeather, fetchWeatherAt } from '@/lib/services/weather';
 import { decodeTrip, encodeTrip, estimateRange } from '@/lib/trip';
 import { primeSpeech, speak, stopSpeaking } from '@/lib/voice';
+import { releaseWakeLock, requestWakeLock } from '@/lib/wakelock';
 import { cn, formatDistanceKm, formatDurationMin } from '@/lib/utils';
 import {
   ChargerSite,
@@ -124,6 +128,7 @@ export function MapShell() {
   const [liveAlerts, setLiveAlerts] = useState<RoadAlert[]>([]);
   const [jams, setJams] = useState<TrafficJam[]>([]);
   const [trafficThrottled, setTrafficThrottled] = useState(false);
+  const [weather, setWeather] = useState<StopWeather | null>(null);
   const [reportOpen, setReportOpen] = useState(false);
   const [track, setTrack] = useState<TrackPoint[]>([]);
   const [recording, setRecording] = useState(false);
@@ -152,6 +157,8 @@ export function MapShell() {
     setToast(message);
     setTimeout(() => setToast((current) => (current === message ? null : current)), 3200);
   }, []);
+
+  useEffect(() => () => void releaseWakeLock(), []);
 
   /* ---------------------------------------------------------- theming */
   useEffect(() => {
@@ -310,7 +317,7 @@ export function MapShell() {
     announcedAlertsRef.current.clear();
 
     // Both are per-route one-shots, not per-tick work.
-    fetchSpeedLimits(route.legs, controller.signal)
+    fetchSpeedLimits(route.legs, options.mode, controller.signal)
       .then(setSpeedLimits)
       .catch(() => setSpeedLimits([]));
 
@@ -652,6 +659,7 @@ export function MapShell() {
       setNavActive(false);
       setProgress(null);
       stopSpeaking();
+      void releaseWakeLock();
       return;
     }
 
@@ -667,6 +675,8 @@ export function MapShell() {
     setNavActive(true);
     setPanelOpen(false);
     setSelectedCharger(null);
+    // Must follow the click: the API requires a user gesture.
+    void requestWakeLock();
 
     if (preferences.voiceGuidance) {
       primeSpeech();
@@ -757,6 +767,32 @@ export function MapShell() {
   }, [route, activeAlternativeId]);
 
   const range = useMemo(() => estimateRange(route, vehicle), [route, vehicle]);
+
+  /** Delay from jams that genuinely sit on this route. */
+  const trafficDelay = useMemo(
+    () => (route ? estimateTrafficDelay(jams, route.coordinates) : null),
+    [route, jams]
+  );
+
+  /* ----------------------------------------------- weather at destination */
+  useEffect(() => {
+    if (!route || !destination) {
+      setWeather(null);
+      return;
+    }
+
+    const controller = new AbortController();
+    // Forecast for arrival, not departure — that is the whole point of asking.
+    const arrival = Date.now() + (route.summary.durationMin + (trafficDelay?.seconds ?? 0) / 60) * 60_000;
+
+    fetchWeatherAt(destination.coordinate, arrival, controller.signal)
+      .then(setWeather)
+      .catch(() => setWeather(null));
+
+    return () => controller.abort();
+    // Re-fetching on every traffic tick would be wasteful; the route is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [route, destination?.id]);
 
   return (
     <main className="relative h-[100dvh] w-screen overflow-hidden bg-surface text-fg">
@@ -1013,7 +1049,14 @@ export function MapShell() {
                       <span className="text-subtle">
                         {formatDistanceKm(activeRouteSummary.distanceKm, preferences.imperial)}
                       </span>
-                      <span className="text-subtle">arrive {formatEtaClock(activeRouteSummary.durationMin * 60)}</span>
+                      <span className="text-subtle">
+                        arrive {formatEtaClock(activeRouteSummary.durationMin * 60 + (trafficDelay?.seconds ?? 0))}
+                      </span>
+                      {trafficDelay && trafficDelay.seconds > 60 ? (
+                        <Tag tone="amber">
+                          +{Math.round(trafficDelay.seconds / 60)} min traffic
+                        </Tag>
+                      ) : null}
                       {activeRouteSummary.hasToll ? <Tag tone="amber">Tolls</Tag> : null}
                       {activeRouteSummary.hasFerry ? <Tag tone="sky">Ferry</Tag> : null}
                       {waypoints.length > 2 ? (
@@ -1100,7 +1143,7 @@ export function MapShell() {
             ) : null}
 
             {route ? (
-              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
+              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_15rem_15rem]">
                 {/* minmax(0,…) lets the turn list shrink; a bare 1fr floors at its
                     longest instruction and pushes the range card off-panel. */}
                 <div className="rounded-2xl border border-line bg-raised p-3">
@@ -1117,6 +1160,29 @@ export function MapShell() {
                     ))}
                   </div>
                 </div>
+
+                {weather ? (
+                  <div
+                    className={cn(
+                      'rounded-2xl border p-3',
+                      weather.caution ? 'border-amber-500/40 bg-amber-500/10' : 'border-line bg-raised'
+                    )}
+                  >
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
+                      <CloudSun className="h-3.5 w-3.5" />
+                      On arrival
+                    </div>
+                    <p className="mt-2 text-sm text-fg">
+                      {weather.summary}
+                      {weather.temperatureC !== null
+                        ? `, ${Math.round(preferences.imperial ? weather.temperatureC * 1.8 + 32 : weather.temperatureC)}°${preferences.imperial ? 'F' : 'C'}`
+                        : ''}
+                    </p>
+                    {weather.caution ? (
+                      <p className="mt-1 text-sm font-semibold text-amber-100">{weather.caution}</p>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {range ? (
                   <div

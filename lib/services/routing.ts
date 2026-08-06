@@ -2,6 +2,7 @@ import { getEndpoints } from '@/lib/config';
 import { decodePolyline6 } from '@/lib/geometry';
 import {
   Coordinate,
+  TravelMode,
   ManeuverKind,
   RouteAlternative,
   RouteLeg,
@@ -93,18 +94,61 @@ const MANEUVER_KINDS: Record<number, ManeuverKind> = {
   38: 'merge'
 };
 
+/**
+ * Costing weights for the chosen mode.
+ *
+ * Valhalla "use_*" weights run 0 (avoid) → 1 (prefer). A hard 0 makes routing
+ * fail where the only path is tolled, so avoidance biases low rather than
+ * forbidding. Each mode takes a different option bag — sending `auto` keys
+ * under `bicycle` is simply ignored, which would make the toggles look broken.
+ */
 function buildCostingOptions(options: RouteOptions) {
-  // Valhalla "use_*" weights run 0 (avoid) → 1 (prefer). Setting a hard 0 makes
-  // routes fail in places where the only path is tolled, so we bias low instead.
-  return {
-    auto: {
-      use_tolls: options.avoidTolls ? 0.1 : 0.5,
-      use_highways: options.avoidHighways ? 0.1 : 0.7,
-      use_ferry: options.avoidFerries ? 0.1 : 0.5,
-      use_living_streets: options.preferTwisty ? 0.6 : 0.1,
-      use_tracks: options.preferTwisty ? 0.3 : 0.0
-    }
-  };
+  switch (options.mode) {
+    case 'bicycle':
+      return {
+        bicycle: {
+          // Riders asking for scenic want quiet lanes; otherwise favour directness.
+          use_roads: options.preferTwisty ? 0.25 : 0.5,
+          use_hills: options.preferTwisty ? 0.5 : 0.25,
+          use_ferry: options.avoidFerries ? 0.1 : 0.5,
+          bicycle_type: 'hybrid'
+        }
+      };
+    case 'pedestrian':
+      return {
+        pedestrian: {
+          walking_speed: 5.1,
+          use_ferry: options.avoidFerries ? 0.1 : 0.5
+        }
+      };
+    case 'motor_scooter':
+      return {
+        motor_scooter: {
+          use_highways: options.avoidHighways ? 0.0 : 0.3,
+          use_tolls: options.avoidTolls ? 0.1 : 0.5,
+          use_ferry: options.avoidFerries ? 0.1 : 0.5,
+          use_hills: options.preferTwisty ? 0.5 : 0.25
+        }
+      };
+    case 'truck':
+      return {
+        truck: {
+          use_tolls: options.avoidTolls ? 0.1 : 0.5,
+          use_highways: options.avoidHighways ? 0.1 : 0.9,
+          use_ferry: options.avoidFerries ? 0.1 : 0.5
+        }
+      };
+    default:
+      return {
+        auto: {
+          use_tolls: options.avoidTolls ? 0.1 : 0.5,
+          use_highways: options.avoidHighways ? 0.1 : 0.7,
+          use_ferry: options.avoidFerries ? 0.1 : 0.5,
+          use_living_streets: options.preferTwisty ? 0.6 : 0.1,
+          use_tracks: options.preferTwisty ? 0.3 : 0.0
+        }
+      };
+  }
 }
 
 export async function fetchRoute(
@@ -125,7 +169,7 @@ export async function fetchRoute(
       // arrival maneuvers rather than routing straight through them.
       type: index === 0 || index === stops.length - 1 ? 'break' : 'break_through'
     })),
-    costing: 'auto',
+    costing: options.mode,
     costing_options: buildCostingOptions(options),
     directions_options: { units: 'kilometers' },
     // Alternates only apply to two-point routes in Valhalla.

@@ -16,8 +16,12 @@ import {
   MapPin,
   ParkingSquare,
   Plus,
+  Bike,
+  Car,
+  Footprints,
   Search,
   SlidersHorizontal,
+  Truck,
   Star,
   Toilet,
   Trash2,
@@ -30,7 +34,7 @@ import { hasLocalDataKey, searchBusinesses } from '@/lib/services/localdata';
 import { SavedPlace } from '@/lib/storage';
 import { bearingCompass } from '@/lib/format';
 import { cn, formatDistanceKm } from '@/lib/utils';
-import { Coordinate, Place, PlaceCategoryId, RouteOptions, SearchFeature, Waypoint } from '@/types/map';
+import { Coordinate, Place, PlaceCategoryId, RouteOptions, SearchFeature, TravelMode, Waypoint } from '@/types/map';
 
 type Props = {
   open: boolean;
@@ -55,6 +59,13 @@ type Props = {
   onCategorySelect: (category: PlaceCategoryId | null, alongRoute: boolean) => void;
   onClearRecents: () => void;
 };
+
+const MODES: Array<{ mode: TravelMode; label: string; icon: typeof Car }> = [
+  { mode: 'auto', label: 'Drive', icon: Car },
+  { mode: 'truck', label: 'Truck', icon: Truck },
+  { mode: 'bicycle', label: 'Bike', icon: Bike },
+  { mode: 'pedestrian', label: 'Walk', icon: Footprints }
+];
 
 const CATEGORY_ICONS: Record<PlaceCategoryId, ReactNode> = {
   fuel: <Fuel className="h-4 w-4" />,
@@ -367,6 +378,27 @@ export function SearchPanel({
               <ChevronDown className={cn('h-4 w-4 transition', showOptions && 'rotate-180')} />
             </button>
             {showOptions ? (
+              <>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {MODES.map(({ mode, label, icon: Icon }) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => onOptionsChange({ ...options, mode })}
+                      aria-pressed={options.mode === mode}
+                      title={label}
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
+                        options.mode === mode
+                          ? 'border-sky-400 bg-sky-500/25 text-sky-100'
+                          : 'border-line bg-raised text-muted hover:bg-strong'
+                      )}
+                    >
+                      <Icon className="h-3.5 w-3.5" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 <Chip label="Avoid tolls" active={options.avoidTolls} onClick={() => onOptionsChange({ ...options, avoidTolls: !options.avoidTolls })} />
                 <Chip label="Avoid highways" active={options.avoidHighways} onClick={() => onOptionsChange({ ...options, avoidHighways: !options.avoidHighways })} />
@@ -374,6 +406,7 @@ export function SearchPanel({
                 <Chip label="Scenic roads" active={options.preferTwisty} onClick={() => onOptionsChange({ ...options, preferTwisty: !options.preferTwisty })} />
                 <Chip label="Show alternates" active={options.alternatives} onClick={() => onOptionsChange({ ...options, alternatives: !options.alternatives })} />
               </div>
+              </>
             ) : null}
           </section>
 

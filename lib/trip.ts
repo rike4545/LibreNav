@@ -1,4 +1,4 @@
-import { RouteOptions, RouteResponse, VehicleProfile, Waypoint } from '@/types/map';
+import { RouteOptions, RouteResponse, TravelMode, VehicleProfile, Waypoint } from '@/types/map';
 import { defaultRouteOptions } from '@/lib/storage';
 
 /**
@@ -22,6 +22,8 @@ export function encodeTrip(waypoints: Waypoint[], options: RouteOptions): string
     .join('|');
 
   params.set('trip', trip);
+
+  if (options.mode !== 'auto') params.set('mode', options.mode);
 
   const flags = [
     options.avoidTolls ? 't' : '',
@@ -80,9 +82,13 @@ export function decodeTrip(search: string): { waypoints: Waypoint[]; options: Ro
   if (!waypoints.length) return null;
 
   const flags = params.get('opts') ?? '';
+  const mode = params.get('mode');
+  const modes: TravelMode[] = ['auto', 'truck', 'motor_scooter', 'bicycle', 'pedestrian'];
+
   return {
     waypoints,
     options: {
+      mode: modes.includes(mode as TravelMode) ? (mode as TravelMode) : 'auto',
       avoidTolls: flags.includes('t'),
       avoidHighways: flags.includes('h'),
       avoidFerries: flags.includes('f'),

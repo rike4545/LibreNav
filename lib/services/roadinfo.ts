@@ -1,5 +1,5 @@
 import { getEndpoints } from '@/lib/config';
-import { RouteLeg, SpeedLimitSpan } from '@/types/map';
+import { RouteLeg, SpeedLimitSpan, TravelMode } from '@/types/map';
 
 type TraceEdge = {
   speed_limit?: number;
@@ -24,7 +24,11 @@ type TraceResponse = {
  * Limits come back in the requested units (km/h here) and are null wherever
  * OSM carries no maxspeed tag — which is a lot of roads.
  */
-export async function fetchSpeedLimits(legs: RouteLeg[], signal?: AbortSignal): Promise<SpeedLimitSpan[]> {
+export async function fetchSpeedLimits(
+  legs: RouteLeg[],
+  mode: TravelMode = 'auto',
+  signal?: AbortSignal
+): Promise<SpeedLimitSpan[]> {
   const { valhallaUrl } = getEndpoints();
   const spans: SpeedLimitSpan[] = [];
 
@@ -38,7 +42,7 @@ export async function fetchSpeedLimits(legs: RouteLeg[], signal?: AbortSignal): 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           encoded_polyline: leg.encodedShape,
-          costing: 'auto',
+          costing: mode,
           shape_match: 'edge_walk',
           directions_options: { units: 'kilometers' },
           filters: {

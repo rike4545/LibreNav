@@ -36,6 +36,7 @@ export type Preferences = {
 };
 
 export const defaultRouteOptions: RouteOptions = {
+  mode: 'auto',
   avoidTolls: false,
   avoidHighways: false,
   avoidFerries: false,
