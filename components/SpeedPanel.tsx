@@ -26,7 +26,7 @@ export function SpeedPanel({ speedKmh, limitKmh, imperial }: Props) {
         <div
           className={cn(
             'flex h-[4.5rem] w-[4.5rem] flex-col items-center justify-center rounded-2xl border shadow-panel backdrop-blur transition-colors',
-            over ? 'border-rose-400/70 bg-rose-500/90 text-white' : 'border-border bg-slate-900/90 text-white'
+            over ? 'border-rose-400/70 bg-rose-500/90 text-fg' : 'border-line bg-surface/95 text-fg'
           )}
         >
           <span className="text-2xl font-bold leading-none tabular-nums">{toDisplay(speedKmh)}</span>
@@ -44,7 +44,7 @@ export function SpeedPanel({ speedKmh, limitKmh, imperial }: Props) {
           )}
         >
           <span className="text-xl font-black leading-none tabular-nums text-slate-900">{toDisplay(limitKmh)}</span>
-          <span className="text-[8px] font-bold uppercase tracking-tight text-slate-500">{unit}</span>
+          <span className="text-[8px] font-bold uppercase tracking-tight text-subtle">{unit}</span>
         </div>
       ) : null}
     </div>

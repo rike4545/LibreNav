@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { BatteryCharging, Coffee, Globe, RotateCcw, Server, X } from 'lucide-react';
 import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, resetEndpoints, saveEndpoints } from '@/lib/config';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
-import { Preferences } from '@/lib/storage';
+import { Preferences, ThemeChoice } from '@/lib/storage';
 import { cn } from '@/lib/utils';
 import { VehicleProfile } from '@/types/map';
 
@@ -35,16 +35,37 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
   }
 
   return (
-    <div className="flex max-h-[min(85vh,44rem)] w-[min(30rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-border bg-slate-900/97 shadow-panel backdrop-blur">
-      <header className="flex items-center justify-between border-b border-border px-5 py-4">
-        <h2 className="text-lg font-semibold text-white">Settings</h2>
-        <button type="button" onClick={onClose} aria-label="Close settings" className="rounded-full p-1.5 text-slate-400 hover:bg-slate-800 hover:text-white">
+    <div className="flex max-h-[min(85vh,44rem)] w-[min(30rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-panel">
+      <header className="flex items-center justify-between border-b border-line px-5 py-4">
+        <h2 className="text-lg font-semibold text-fg">Settings</h2>
+        <button type="button" onClick={onClose} aria-label="Close settings" className="rounded-full p-1.5 text-subtle hover:bg-strong hover:text-fg">
           <X className="h-5 w-5" />
         </button>
       </header>
 
       <div className="overflow-y-auto px-5 py-4">
         <Section title="Display" icon={<Globe className="h-4 w-4" />}>
+          <div className="mb-3">
+            <div className="text-xs font-medium text-muted">Theme</div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {(['system', 'light', 'dark'] as ThemeChoice[]).map((choice) => (
+                <button
+                  key={choice}
+                  type="button"
+                  onClick={() => onPreferencesChange({ ...preferences, theme: choice })}
+                  aria-pressed={preferences.theme === choice}
+                  className={cn(
+                    'rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition',
+                    preferences.theme === choice
+                      ? 'border-sky-400 bg-sky-500/25 text-sky-100'
+                      : 'border-line bg-raised text-muted hover:bg-strong'
+                  )}
+                >
+                  {choice}
+                </button>
+              ))}
+            </div>
+          </div>
           <Toggle
             label="Imperial units"
             hint="Miles and feet instead of kilometres and metres."
@@ -75,7 +96,7 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
             onChange={(value) => onPreferencesChange({ ...preferences, terrain3d: value })}
           />
           <div className="mt-3">
-            <div className="text-xs font-medium text-slate-300">Map style</div>
+            <div className="text-xs font-medium text-muted">Map style</div>
             <div className="mt-2 flex flex-wrap gap-1.5">
               {MAP_STYLES.map((style) => (
                 <button
@@ -86,7 +107,7 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
                     'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
                     preferences.mapStyleId === style.id
                       ? 'border-sky-400 bg-sky-500/25 text-sky-100'
-                      : 'border-border bg-slate-800/70 text-slate-300 hover:bg-slate-700'
+                      : 'border-line bg-raised text-muted hover:bg-strong'
                   )}
                 >
                   {style.label}
@@ -120,14 +141,14 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
             allLabel={chargerNetworks.length ? 'Any network' : 'No networks loaded yet'}
             onChange={(value) => onPreferencesChange({ ...preferences, chargerNetwork: value })}
           />
-          <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+          <p className="mt-1.5 text-[11px] leading-relaxed text-subtle">
             Connector and network come from OpenStreetMap tags, which are often missing — filtering will hide chargers
             that simply have not been tagged.
           </p>
         </Section>
 
         <Section title="Vehicle" icon={<BatteryCharging className="h-4 w-4" />}>
-          <p className="mb-2 text-xs leading-relaxed text-slate-400">
+          <p className="mb-2 text-xs leading-relaxed text-subtle">
             Used for the range estimate on the route sheet. It is a flat energy model — no elevation, temperature, or speed
             effects — so treat it as a planning hint.
           </p>
@@ -138,9 +159,9 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
         </Section>
 
         <Section title="Service endpoints" icon={<Server className="h-4 w-4" />}>
-          <p className="mb-3 text-xs leading-relaxed text-slate-400">
+          <p className="mb-3 text-xs leading-relaxed text-subtle">
             LibreNav ships pointed at the public OSM services. Point these at your own stack — the bundled{' '}
-            <code className="rounded bg-slate-800 px-1 py-0.5 text-[11px]">docker-compose.yml</code> runs Valhalla and Photon
+            <code className="rounded bg-raised px-1 py-0.5 text-[11px]">docker-compose.yml</code> runs Valhalla and Photon
             locally. Browsers block http://localhost from an https page, so use the local dev server for a self-hosted setup.
           </p>
 
@@ -161,7 +182,7 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
             <button
               type="button"
               onClick={restoreDefaults}
-              className="flex items-center gap-1.5 rounded-full border border-border bg-slate-800 px-4 py-2 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
+              className="flex items-center gap-1.5 rounded-full border border-line bg-raised px-4 py-2 text-sm font-medium text-muted transition hover:bg-strong"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Defaults
@@ -180,7 +201,7 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
           Support this project
         </a>
 
-        <p className="mt-5 border-t border-border pt-4 text-xs leading-relaxed text-slate-500">
+        <p className="mt-5 border-t border-line pt-4 text-xs leading-relaxed text-subtle">
           Map data © OpenStreetMap contributors. Routing by Valhalla (FOSSGIS), search by Photon (Komoot), places via
           Overpass, speed limits and cameras from OSM via Valhalla and Overpass. Everything you save stays in this browser.
         </p>
@@ -192,7 +213,7 @@ export function SettingsPanel({ preferences, vehicle, chargerNetworks, onPrefere
 function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) {
   return (
     <section className="mb-6">
-      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-white">
+      <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-fg">
         <span className="text-sky-400">{icon}</span>
         {title}
       </div>
@@ -205,8 +226,8 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
   return (
     <label className="flex cursor-pointer items-start justify-between gap-3 py-2">
       <span className="min-w-0">
-        <span className="block text-sm text-slate-100">{label}</span>
-        {hint ? <span className="block text-xs text-slate-500">{hint}</span> : null}
+        <span className="block text-sm text-fg">{label}</span>
+        {hint ? <span className="block text-xs text-subtle">{hint}</span> : null}
       </span>
       <button
         type="button"
@@ -214,7 +235,7 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
         aria-checked={checked}
         aria-label={label}
         onClick={() => onChange(!checked)}
-        className={cn('mt-0.5 h-6 w-11 shrink-0 rounded-full p-0.5 transition', checked ? 'bg-sky-500' : 'bg-slate-700')}
+        className={cn('mt-0.5 h-6 w-11 shrink-0 rounded-full p-0.5 transition', checked ? 'bg-sky-500' : 'bg-strong')}
       >
         <span className={cn('block h-5 w-5 rounded-full bg-white transition-transform', checked && 'translate-x-5')} />
       </button>
@@ -241,7 +262,7 @@ function NumberField({
 }) {
   return (
     <label className="mt-3 flex items-center justify-between gap-3">
-      <span className="text-sm text-slate-100">{label}</span>
+      <span className="text-sm text-fg">{label}</span>
       <span className="flex items-center gap-2">
         <input
           type="number"
@@ -253,9 +274,9 @@ function NumberField({
             const next = Number(event.target.value);
             if (Number.isFinite(next)) onChange(Math.min(max, Math.max(min, next)));
           }}
-          className="w-24 rounded-lg border border-border bg-slate-800 px-2.5 py-1.5 text-right text-sm tabular-nums text-white outline-none focus:border-sky-400"
+          className="w-24 rounded-lg border border-line bg-raised px-2.5 py-1.5 text-right text-sm tabular-nums text-fg outline-none focus:border-sky-400"
         />
-        <span className="w-20 text-xs text-slate-500">{suffix}</span>
+        <span className="w-20 text-xs text-subtle">{suffix}</span>
       </span>
     </label>
   );
@@ -276,12 +297,12 @@ function SelectField({
 }) {
   return (
     <label className="mt-3 flex items-center justify-between gap-3">
-      <span className="text-sm text-slate-100">{label}</span>
+      <span className="text-sm text-fg">{label}</span>
       <select
         value={value ?? ''}
         disabled={!options.length}
         onChange={(event) => onChange(event.target.value || null)}
-        className="w-48 rounded-lg border border-border bg-slate-800 px-2.5 py-1.5 text-sm text-white outline-none focus:border-sky-400 disabled:opacity-50"
+        className="w-48 rounded-lg border border-line bg-raised px-2.5 py-1.5 text-sm text-fg outline-none focus:border-sky-400 disabled:opacity-50"
       >
         <option value="">{allLabel}</option>
         {options.map((option) => (
@@ -297,14 +318,14 @@ function SelectField({
 function TextField({ label, value, placeholder, onChange }: { label: string; value: string; placeholder: string; onChange: (value: string) => void }) {
   return (
     <label className="mt-3 block">
-      <span className="block text-xs font-medium text-slate-300">{label}</span>
+      <span className="block text-xs font-medium text-muted">{label}</span>
       <input
         type="url"
         value={value}
         placeholder={placeholder}
         spellCheck={false}
         onChange={(event) => onChange(event.target.value)}
-        className="mt-1 w-full rounded-lg border border-border bg-slate-800 px-3 py-2 text-sm text-white outline-none focus:border-sky-400"
+        className="mt-1 w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-fg outline-none focus:border-sky-400"
       />
     </label>
   );

@@ -20,7 +20,7 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
   const tier = power === null ? 'unknown' : power >= 150 ? 'ultra' : power >= 50 ? 'fast' : 'slow';
 
   return (
-    <div className="w-[min(24rem,calc(100vw-2rem))] rounded-3xl border border-border bg-slate-900/97 p-4 shadow-panel backdrop-blur">
+    <div className="w-[min(24rem,calc(100vw-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -30,14 +30,14 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
                 tier === 'ultra' ? 'text-cyan-300' : tier === 'fast' ? 'text-emerald-300' : 'text-lime-300'
               )}
             />
-            <h3 className="truncate text-base font-semibold text-white">{charger.name}</h3>
+            <h3 className="truncate text-base font-semibold text-fg">{charger.name}</h3>
           </div>
-          <p className="mt-0.5 truncate text-xs text-slate-400">
+          <p className="mt-0.5 truncate text-xs text-subtle">
             {charger.network}
             {from ? ` · ${bearingCompass(from, charger.coordinate, imperial)}` : ''}
           </p>
         </div>
-        <button type="button" onClick={onClose} aria-label="Close charger details" className="shrink-0 rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-white">
+        <button type="button" onClick={onClose} aria-label="Close charger details" className="shrink-0 rounded-full p-1 text-subtle hover:bg-strong hover:text-fg">
           <X className="h-4 w-4" />
         </button>
       </div>
@@ -60,15 +60,15 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {charger.plugs.map((plug) => (
-          <span key={plug} className="rounded-md bg-slate-800 px-2 py-1 text-[11px] font-medium text-slate-300">
+          <span key={plug} className="rounded-md bg-raised px-2 py-1 text-[11px] font-medium text-muted">
             {plug}
           </span>
         ))}
       </div>
 
-      {charger.address ? <p className="mt-3 text-xs text-slate-400">{charger.address}</p> : null}
+      {charger.address ? <p className="mt-3 text-xs text-subtle">{charger.address}</p> : null}
       {charger.openingHours ? (
-        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+        <p className="mt-1.5 flex items-center gap-1.5 text-xs text-subtle">
           <Clock className="h-3 w-3 shrink-0" />
           {charger.openingHours}
         </p>
@@ -99,14 +99,14 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
             target="_blank"
             rel="noreferrer noopener"
             aria-label="Open charger website"
-            className="flex items-center justify-center rounded-full border border-border bg-slate-800 px-3 py-2.5 text-slate-300 transition hover:bg-slate-700"
+            className="flex items-center justify-center rounded-full border border-line bg-raised px-3 py-2.5 text-muted transition hover:bg-strong"
           >
             <ExternalLink className="h-4 w-4" />
           </a>
         ) : null}
       </div>
 
-      <p className="mt-3 text-[11px] leading-relaxed text-slate-500">
+      <p className="mt-3 text-[11px] leading-relaxed text-subtle">
         Details come from OpenStreetMap tags and can be incomplete or out of date. Live availability is not included.
       </p>
     </div>
@@ -114,5 +114,5 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
 }
 
 function Badge({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300">{children}</span>;
+  return <span className="rounded-full bg-raised px-2.5 py-1 text-xs font-medium text-muted">{children}</span>;
 }

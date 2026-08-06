@@ -147,6 +147,23 @@ export function MapShell() {
     setTimeout(() => setToast((current) => (current === message ? null : current)), 3200);
   }, []);
 
+  /* ---------------------------------------------------------- theming */
+  useEffect(() => {
+    const root = document.documentElement;
+    const media = window.matchMedia('(prefers-color-scheme: light)');
+
+    const apply = () => {
+      const resolved = preferences.theme === 'system' ? (media.matches ? 'light' : 'dark') : preferences.theme;
+      root.dataset.theme = resolved;
+    };
+
+    apply();
+    // Only track the OS while actually following it.
+    if (preferences.theme !== 'system') return;
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, [preferences.theme]);
+
   /* -------------------------------------------------- persisted state */
   useEffect(() => {
     setSaved(getSavedPlaces());
@@ -651,6 +668,19 @@ export function MapShell() {
   }
 
   function updatePreferences(next: Preferences) {
+    // Switching theme should carry the basemap with it — a light map under dark
+    // chrome (or the reverse) is exactly what made the sheets hard to read.
+    if (next.theme !== preferences.theme && next.mapStyleId === preferences.mapStyleId) {
+      const resolved =
+        next.theme === 'system'
+          ? window.matchMedia('(prefers-color-scheme: light)').matches
+            ? 'light'
+            : 'dark'
+          : next.theme;
+      const wanted = resolved === 'dark' ? 'dark' : 'liberty';
+      if (MAP_STYLES.some((style) => style.id === wanted)) next = { ...next, mapStyleId: wanted };
+    }
+
     setPreferences(savePreferences(next));
     if (!next.voiceGuidance) stopSpeaking();
   }
@@ -676,7 +706,7 @@ export function MapShell() {
   const range = useMemo(() => estimateRange(route, vehicle), [route, vehicle]);
 
   return (
-    <main className="relative h-[100dvh] w-screen overflow-hidden bg-slate-950 text-slate-100">
+    <main className="relative h-[100dvh] w-screen overflow-hidden bg-surface text-fg">
       <NavMap
         center={mapCenter}
         styleId={preferences.mapStyleId}
@@ -717,7 +747,7 @@ export function MapShell() {
       ) : (
         <>
           <header className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-3 p-3">
-            <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-border bg-slate-900/90 px-4 py-2 shadow-panel backdrop-blur">
+            <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 shadow-panel">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
               <span className="text-sm font-semibold">{appEnv.appName}</span>
               {geoDenied ? <span className="text-xs text-amber-300">GPS off</span> : null}
@@ -748,7 +778,7 @@ export function MapShell() {
               <Link
                 href="/discounts"
                 aria-label="Discounts"
-                className="rounded-full border border-border bg-slate-900/90 p-2.5 text-slate-300 shadow-panel backdrop-blur transition hover:bg-slate-800"
+                className="rounded-full border border-line bg-surface p-2.5 text-muted shadow-panel transition hover:bg-strong"
               >
                 <BadgePercent className="h-4 w-4" />
               </Link>
@@ -761,7 +791,7 @@ export function MapShell() {
                   'rounded-full border p-2.5 shadow-panel backdrop-blur transition',
                   recording
                     ? 'border-rose-400/60 bg-rose-500/25 text-rose-200 hover:bg-rose-500/35'
-                    : 'border-border bg-slate-900/90 text-slate-300 hover:bg-slate-800'
+                    : 'border-line bg-surface/95 text-muted hover:bg-strong'
                 )}
               >
                 {recording ? <Square className="h-4 w-4" /> : <Circle className="h-4 w-4" />}
@@ -776,7 +806,7 @@ export function MapShell() {
                   'rounded-full border p-2.5 shadow-panel backdrop-blur transition',
                   preferences.terrain3d
                     ? 'border-emerald-400/60 bg-emerald-500/20 text-emerald-200'
-                    : 'border-border bg-slate-900/90 text-slate-300 hover:bg-slate-800'
+                    : 'border-line bg-surface/95 text-muted hover:bg-strong'
                 )}
               >
                 <Mountain className="h-4 w-4" />
@@ -785,7 +815,7 @@ export function MapShell() {
                 type="button"
                 onClick={cycleMapStyle}
                 aria-label="Change map style"
-                className="rounded-full border border-border bg-slate-900/90 p-2.5 text-slate-300 shadow-panel backdrop-blur transition hover:bg-slate-800"
+                className="rounded-full border border-line bg-surface p-2.5 text-muted shadow-panel transition hover:bg-strong"
               >
                 <Layers className="h-4 w-4" />
               </button>
@@ -793,38 +823,13 @@ export function MapShell() {
                 type="button"
                 onClick={() => setSettingsOpen(true)}
                 aria-label="Settings"
-                className="rounded-full border border-border bg-slate-900/90 p-2.5 text-slate-300 shadow-panel backdrop-blur transition hover:bg-slate-800"
+                className="rounded-full border border-line bg-surface p-2.5 text-muted shadow-panel transition hover:bg-strong"
               >
                 <Settings2 className="h-4 w-4" />
               </button>
             </div>
           </header>
 
-          <div className="absolute left-3 top-16 z-30 w-[min(26rem,calc(100vw-1.5rem))]">
-            <SearchPanel
-              open={panelOpen}
-              onOpenChange={setPanelOpen}
-              anchor={userPosition?.coordinate ?? mapCenter}
-              waypoints={waypoints}
-              saved={saved}
-              recents={recents}
-              options={options}
-              imperial={preferences.imperial}
-              categoryLoading={categoryLoading}
-              categoryResults={places}
-              activeCategory={activeCategory}
-              hasRoute={Boolean(route)}
-              onOptionsChange={(next) => setOptions(saveRouteOptions(next))}
-              onSetDestination={setDestination}
-              onAddStop={addStop}
-              onRemoveWaypoint={removeWaypoint}
-              onMoveWaypoint={moveWaypoint}
-              onToggleSaved={(feature) => setSaved(toggleSavedPlace(feature))}
-              onSetRole={(id, role) => setSaved(setPlaceRole(id, role))}
-              onCategorySelect={handleCategory}
-              onClearRecents={() => setRecents(clearRecents())}
-            />
-          </div>
         </>
       )}
 
@@ -885,7 +890,7 @@ export function MapShell() {
       ) : null}
 
       {settingsOpen ? (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-surface/95 p-4 backdrop-blur-sm">
           <SettingsPanel
             preferences={preferences}
             vehicle={vehicle}
@@ -899,11 +904,38 @@ export function MapShell() {
 
       {!navActive && !selectedCharger && !reportOpen ? (
         <div className="absolute inset-x-0 bottom-0 z-20 px-2 pb-2">
-          <div className="mx-auto w-[min(60rem,100%)] rounded-[1.75rem] border border-border bg-slate-900/95 p-4 shadow-panel backdrop-blur">
+          <div className="mx-auto w-[min(60rem,100%)] overflow-hidden rounded-[1.75rem] border border-line bg-surface shadow-panel">
+            {/* One surface: search, discovery, and the trip all live here, so
+                there is no separate "where to?" prompt competing with it. */}
+            <SearchPanel
+              open={panelOpen}
+              onOpenChange={setPanelOpen}
+              anchor={userPosition?.coordinate ?? mapCenter}
+              waypoints={waypoints}
+              saved={saved}
+              recents={recents}
+              options={options}
+              imperial={preferences.imperial}
+              categoryLoading={categoryLoading}
+              categoryResults={places}
+              activeCategory={activeCategory}
+              hasRoute={Boolean(route)}
+              onOptionsChange={(next) => setOptions(saveRouteOptions(next))}
+              onSetDestination={setDestination}
+              onAddStop={addStop}
+              onRemoveWaypoint={removeWaypoint}
+              onMoveWaypoint={moveWaypoint}
+              onToggleSaved={(feature) => setSaved(toggleSavedPlace(feature))}
+              onSetRole={(id, role) => setSaved(setPlaceRole(id, role))}
+              onCategorySelect={handleCategory}
+              onClearRecents={() => setRecents(clearRecents())}
+            />
+
+            <div className="border-t border-line p-4">
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 {routeLoading ? (
-                  <div className="flex items-center gap-2 text-slate-300">
+                  <div className="flex items-center gap-2 text-muted">
                     <Loader2 className="h-4 w-4 animate-spin text-sky-400" />
                     <span className="text-sm">Finding the best route…</span>
                   </div>
@@ -914,15 +946,15 @@ export function MapShell() {
                   </div>
                 ) : activeRouteSummary && destination ? (
                   <>
-                    <div className="truncate text-lg font-semibold text-white">{destination.name}</div>
+                    <div className="truncate text-lg font-semibold text-fg">{destination.name}</div>
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-                      <span className="text-2xl font-semibold tabular-nums text-white">
+                      <span className="text-2xl font-semibold tabular-nums text-fg">
                         {formatDurationMin(activeRouteSummary.durationMin)}
                       </span>
-                      <span className="text-slate-400">
+                      <span className="text-subtle">
                         {formatDistanceKm(activeRouteSummary.distanceKm, preferences.imperial)}
                       </span>
-                      <span className="text-slate-400">arrive {formatEtaClock(activeRouteSummary.durationMin * 60)}</span>
+                      <span className="text-subtle">arrive {formatEtaClock(activeRouteSummary.durationMin * 60)}</span>
                       {activeRouteSummary.hasToll ? <Tag tone="amber">Tolls</Tag> : null}
                       {activeRouteSummary.hasFerry ? <Tag tone="sky">Ferry</Tag> : null}
                       {waypoints.length > 2 ? (
@@ -933,12 +965,11 @@ export function MapShell() {
                     </div>
                   </>
                 ) : (
-                  <>
-                    <div className="text-lg font-semibold text-white">Where to?</div>
-                    <div className="mt-1 text-sm text-slate-400">
-                      Search above, tap a charger, or long-press the map to drop a destination.
-                    </div>
-                  </>
+                  // The search field directly above already asks the question,
+                  // so this stays a quiet hint rather than a second headline.
+                  <div className="text-sm text-subtle">
+                    Tap a charger or long-press the map to drop a destination.
+                  </div>
                 )}
               </div>
 
@@ -1013,14 +1044,14 @@ export function MapShell() {
               <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_20rem]">
                 {/* minmax(0,…) lets the turn list shrink; a bare 1fr floors at its
                     longest instruction and pushes the range card off-panel. */}
-                <div className="rounded-2xl border border-border bg-slate-800/50 p-3">
-                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">First turns</div>
+                <div className="rounded-2xl border border-line bg-raised p-3">
+                  <div className="text-xs font-semibold uppercase tracking-[0.2em] text-subtle">First turns</div>
                   <div className="mt-2 space-y-1.5">
                     {route.maneuvers.slice(0, 3).map((maneuver, index) => (
                       <div key={`${maneuver.shapeIndex}-${index}`} className="flex items-center gap-2.5">
                         <ManeuverIcon kind={maneuver.kind} className="h-4 w-4 shrink-0 text-sky-300" />
-                        <span className="min-w-0 flex-1 truncate text-sm text-slate-200">{maneuver.instruction}</span>
-                        <span className="shrink-0 text-xs tabular-nums text-slate-500">
+                        <span className="min-w-0 flex-1 truncate text-sm text-muted">{maneuver.instruction}</span>
+                        <span className="shrink-0 text-xs tabular-nums text-subtle">
                           {formatDistanceM(maneuver.distanceKm * 1000, preferences.imperial)}
                         </span>
                       </div>
@@ -1035,7 +1066,7 @@ export function MapShell() {
                       range.reachable ? 'border-emerald-500/30 bg-emerald-500/10' : 'border-amber-500/40 bg-amber-500/10'
                     )}
                   >
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-300">
+                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
                       <Zap className="h-3.5 w-3.5" />
                       Range estimate
                     </div>
@@ -1062,12 +1093,13 @@ export function MapShell() {
                 ) : null}
               </div>
             ) : null}
+            </div>
           </div>
         </div>
       ) : null}
 
       {toast ? (
-        <div className="pointer-events-none absolute bottom-40 left-1/2 z-50 -translate-x-1/2 rounded-full border border-border bg-slate-800/95 px-4 py-2 text-sm text-slate-100 shadow-panel backdrop-blur">
+        <div className="pointer-events-none absolute bottom-40 left-1/2 z-50 -translate-x-1/2 rounded-full border border-line bg-raised px-4 py-2 text-sm text-fg shadow-panel backdrop-blur">
           {toast}
         </div>
       ) : null}
@@ -1082,7 +1114,7 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="flex items-center gap-2 rounded-full border border-border bg-slate-800/90 px-3.5 py-2.5 text-sm font-medium text-slate-200 transition hover:bg-slate-700"
+      className="flex items-center gap-2 rounded-full border border-line bg-raised px-3.5 py-2.5 text-sm font-medium text-muted transition hover:bg-strong"
     >
       {children}
       <span className="hidden sm:inline">{label}</span>
@@ -1098,7 +1130,7 @@ function AlternateChip({ active, onClick, children }: { active: boolean; onClick
       aria-pressed={active}
       className={cn(
         'rounded-full px-3 py-1.5 text-xs font-semibold transition',
-        active ? 'bg-sky-500 text-slate-950' : 'bg-slate-700/80 text-slate-200 hover:bg-slate-700'
+        active ? 'bg-sky-500 text-slate-950' : 'bg-strong text-muted hover:bg-strong'
       )}
     >
       {children}
@@ -1110,7 +1142,7 @@ function Tag({ tone, children }: { tone: 'amber' | 'sky' | 'slate'; children: Re
   const tones = {
     amber: 'bg-amber-500/20 text-amber-200',
     sky: 'bg-sky-500/20 text-sky-200',
-    slate: 'bg-slate-700 text-slate-300'
+    slate: 'bg-strong text-muted'
   };
   return <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold', tones[tone])}>{children}</span>;
 }

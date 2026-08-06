@@ -2,8 +2,40 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/*
+ * Theme tokens as RGB triplets so Tailwind's `rgb(var(--x) / <alpha-value>)`
+ * mapping keeps opacity modifiers working. Dark is the default; the light set
+ * applies when the root carries data-theme="light".
+ *
+ * Surfaces are deliberately near-opaque. Panels sit over a moving map, and at
+ * the 90% or lower they used to run at, street lines and labels bled through
+ * the text underneath and made the sheets hard to read.
+ */
+:root,
+:root[data-theme='dark'] {
   color-scheme: dark;
+  --surface: 12 18 34;
+  --raised: 26 35 55;
+  --strong: 44 56 82;
+  --fg: 248 250 252;
+  --muted: 191 202 219;
+  --subtle: 140 154 176;
+  --line: 74 90 116;
+  --page: 2 6 23;
+  --shadow-panel: 0 14px 40px rgba(2, 6, 23, 0.55);
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --surface: 255 255 255;
+  --raised: 241 245 249;
+  --strong: 226 232 240;
+  --fg: 15 23 42;
+  --muted: 51 65 85;
+  --subtle: 100 116 139;
+  --line: 187 198 212;
+  --page: 226 232 240;
+  --shadow-panel: 0 14px 40px rgba(15, 23, 42, 0.22);
 }
 
 html,
@@ -14,8 +46,8 @@ body {
 }
 
 body {
-  background: #020617;
-  color: #e2e8f0;
+  background: rgb(var(--page));
+  color: rgb(var(--fg));
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   -webkit-font-smoothing: antialiased;
 }

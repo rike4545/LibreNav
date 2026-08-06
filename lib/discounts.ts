@@ -51,6 +51,13 @@ export const discountSections: DiscountSection[] = [
         kind: 'membership'
       },
       {
+        title: 'TeslaFi',
+        href: 'https://linktr.ee/teslafi',
+        description: 'Tesla logging and fleet tracking — drives, charging costs, efficiency, and battery health over time.',
+        badge: 'Tracking',
+        kind: 'partner'
+      },
+      {
         title: 'EVgo memberships',
         href: 'https://www.evgo.com/',
         description: 'Review plan options, Autocharge+, and public fast-charging locations.',

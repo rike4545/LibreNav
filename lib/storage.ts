@@ -14,7 +14,11 @@ export type SavedPlace = SearchFeature & {
   savedAt: string;
 };
 
+export type ThemeChoice = 'dark' | 'light' | 'system';
+
 export type Preferences = {
+  /** UI theme. 'system' follows the OS setting. */
+  theme: ThemeChoice;
   imperial: boolean;
   voiceGuidance: boolean;
   mapStyleId: string;
@@ -40,6 +44,7 @@ export const defaultRouteOptions: RouteOptions = {
 };
 
 export const defaultPreferences: Preferences = {
+  theme: 'system',
   // Follow the locale's convention rather than assuming metric.
   imperial: typeof navigator !== 'undefined' && /^en-(US|GB|MM|LR)/i.test(navigator.language ?? ''),
   voiceGuidance: true,

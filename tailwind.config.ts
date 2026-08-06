@@ -1,5 +1,12 @@
 import type { Config } from 'tailwindcss';
 
+/**
+ * Colours resolve through CSS variables so a single `data-theme` on <html>
+ * reskins the whole app. The `<alpha-value>` form keeps Tailwind's opacity
+ * modifiers (bg-surface/80) working against the variables.
+ */
+const withAlpha = (variable: string) => `rgb(var(${variable}) / <alpha-value>)`;
+
 const config: Config = {
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
@@ -9,12 +16,21 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        panel: '#0f172a',
-        accent: '#38bdf8',
-        border: 'rgba(148, 163, 184, 0.18)'
+        /** Panel and sheet backgrounds. */
+        surface: withAlpha('--surface'),
+        /** Cards nested inside a panel. */
+        raised: withAlpha('--raised'),
+        /** Chips and hover states. */
+        strong: withAlpha('--strong'),
+        /** Primary text. */
+        fg: withAlpha('--fg'),
+        muted: withAlpha('--muted'),
+        subtle: withAlpha('--subtle'),
+        line: withAlpha('--line'),
+        accent: '#38bdf8'
       },
       boxShadow: {
-        panel: '0 14px 40px rgba(2, 6, 23, 0.38)'
+        panel: 'var(--shadow-panel)'
       }
     }
   },

@@ -143,16 +143,16 @@ export function SearchPanel({
   }
 
   return (
-    <div className="overflow-hidden rounded-3xl border border-border bg-slate-900/95 shadow-panel backdrop-blur">
+    <div className="overflow-hidden">
       <div className="flex items-center gap-2 px-4 py-3">
-        <Search className="h-4 w-4 shrink-0 text-slate-400" />
+        <Search className="h-4 w-4 shrink-0 text-subtle" />
         <input
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => onOpenChange(true)}
           placeholder="Search places, addresses, or coordinates"
           aria-label="Search for a destination"
-          className="w-full border-0 bg-transparent text-base text-slate-100 outline-none placeholder:text-slate-500"
+          className="w-full border-0 bg-transparent text-base text-fg outline-none placeholder:text-subtle"
         />
         {searching ? <Loader2 className="h-4 w-4 shrink-0 animate-spin text-sky-400" /> : null}
         {query ? (
@@ -160,7 +160,7 @@ export function SearchPanel({
             type="button"
             onClick={() => setQuery('')}
             aria-label="Clear search"
-            className="shrink-0 rounded-full p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            className="shrink-0 rounded-full p-1 text-subtle hover:bg-strong hover:text-muted"
           >
             <X className="h-4 w-4" />
           </button>
@@ -169,7 +169,7 @@ export function SearchPanel({
             type="button"
             onClick={() => onOpenChange(!open)}
             aria-label={open ? 'Collapse panel' : 'Expand panel'}
-            className="shrink-0 rounded-full p-1 text-slate-400 hover:bg-slate-800"
+            className="shrink-0 rounded-full p-1 text-subtle hover:bg-strong"
           >
             <ChevronDown className={cn('h-4 w-4 transition', open && 'rotate-180')} />
           </button>
@@ -177,14 +177,14 @@ export function SearchPanel({
       </div>
 
       {results.length ? (
-        <div className="max-h-72 overflow-y-auto border-t border-border">
+        <div className="max-h-64 overflow-y-auto border-t border-line">
           {results.map((feature) => (
-            <div key={feature.id} className="flex items-center gap-1 border-b border-border/50 px-2 py-1 last:border-0 hover:bg-slate-800/60">
+            <div key={feature.id} className="flex items-center gap-1 border-b border-line/50 px-2 py-1 last:border-0 hover:bg-strong">
               <button type="button" onClick={() => choose(feature, false)} className="flex min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left">
                 <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-sky-400" />
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-medium text-white">{feature.name}</div>
-                  <div className="truncate text-xs text-slate-400">
+                  <div className="truncate text-sm font-medium text-fg">{feature.name}</div>
+                  <div className="truncate text-xs text-subtle">
                     {feature.label}
                     {anchor ? ` · ${bearingCompass(anchor, feature.coordinate, imperial)}` : ''}
                   </div>
@@ -196,7 +196,7 @@ export function SearchPanel({
                   onClick={() => choose(feature, true)}
                   title="Add as a stop"
                   aria-label={`Add ${feature.name} as a stop`}
-                  className="shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-700 hover:text-amber-300"
+                  className="shrink-0 rounded-full p-2 text-subtle transition hover:bg-strong hover:text-amber-300"
                 >
                   <Plus className="h-4 w-4" />
                 </button>
@@ -205,7 +205,7 @@ export function SearchPanel({
                 type="button"
                 onClick={() => onToggleSaved(feature)}
                 aria-label={`${savedIds.has(feature.id) ? 'Unsave' : 'Save'} ${feature.name}`}
-                className="shrink-0 rounded-full p-2 text-slate-400 transition hover:bg-slate-700 hover:text-yellow-300"
+                className="shrink-0 rounded-full p-2 text-subtle transition hover:bg-strong hover:text-yellow-300"
               >
                 <Star className={cn('h-4 w-4', savedIds.has(feature.id) && 'fill-current text-yellow-300')} />
               </button>
@@ -215,11 +215,11 @@ export function SearchPanel({
       ) : null}
 
       {error && query.trim().length >= 2 && !searching && !results.length ? (
-        <div className="border-t border-border px-4 py-3 text-sm text-slate-400">{error}</div>
+        <div className="border-t border-line px-4 py-3 text-sm text-subtle">{error}</div>
       ) : null}
 
       {open ? (
-        <div className="max-h-[min(60vh,34rem)] overflow-y-auto border-t border-border px-4 py-3">
+        <div className="max-h-[min(45vh,26rem)] overflow-y-auto border-t border-line px-4 py-3">
           <div className="flex flex-wrap gap-1.5">
             {PLACE_CATEGORIES.map((category) => (
               <button
@@ -230,7 +230,7 @@ export function SearchPanel({
                   'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
                   activeCategory === category.id
                     ? 'border-purple-400 bg-purple-500/25 text-purple-100'
-                    : 'border-border bg-slate-800/70 text-slate-300 hover:bg-slate-700'
+                    : 'border-line bg-raised text-muted hover:bg-strong'
                 )}
               >
                 {categoryLoading === category.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : CATEGORY_ICONS[category.id]}
@@ -252,7 +252,7 @@ export function SearchPanel({
           {activeCategory && categoryResults.length ? (
             <div className="mt-3 space-y-1.5">
               {categoryResults.slice(0, 12).map((place) => (
-                <div key={place.id} className="flex items-center gap-1 rounded-xl bg-slate-800/60 hover:bg-slate-800">
+                <div key={place.id} className="flex items-center gap-1 rounded-xl bg-raised hover:bg-strong">
                   <button
                     type="button"
                     onClick={() => choose({ id: place.id, name: place.name, label: place.address ?? '', coordinate: place.coordinate }, false)}
@@ -260,11 +260,11 @@ export function SearchPanel({
                   >
                     <span className="text-purple-300">{CATEGORY_ICONS[place.category]}</span>
                     <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm text-white">{place.name}</span>
-                      {place.address ? <span className="block truncate text-xs text-slate-400">{place.address}</span> : null}
+                      <span className="block truncate text-sm text-fg">{place.name}</span>
+                      {place.address ? <span className="block truncate text-xs text-subtle">{place.address}</span> : null}
                     </span>
                     {place.distanceKm !== undefined ? (
-                      <span className="shrink-0 text-xs tabular-nums text-slate-400">{formatDistanceKm(place.distanceKm, imperial)}</span>
+                      <span className="shrink-0 text-xs tabular-nums text-subtle">{formatDistanceKm(place.distanceKm, imperial)}</span>
                     ) : null}
                   </button>
                   {waypoints.length > 0 ? (
@@ -272,7 +272,7 @@ export function SearchPanel({
                       type="button"
                       onClick={() => choose({ id: place.id, name: place.name, label: place.address ?? '', coordinate: place.coordinate }, true)}
                       aria-label={`Add ${place.name} as a stop`}
-                      className="shrink-0 rounded-full p-2 text-slate-400 hover:bg-slate-700 hover:text-amber-300"
+                      className="shrink-0 rounded-full p-2 text-subtle hover:bg-strong hover:text-amber-300"
                     >
                       <Plus className="h-4 w-4" />
                     </button>
@@ -289,7 +289,7 @@ export function SearchPanel({
               </SectionHeading>
               <div className="mt-2 space-y-1.5">
                 {waypoints.map((waypoint, index) => (
-                  <div key={waypoint.id} className="flex items-center gap-2 rounded-xl bg-slate-800/60 px-3 py-2">
+                  <div key={waypoint.id} className="flex items-center gap-2 rounded-xl bg-raised px-3 py-2">
                     <span
                       className={cn(
                         'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-slate-950',
@@ -299,15 +299,15 @@ export function SearchPanel({
                       {index === 0 ? 'A' : index === waypoints.length - 1 ? 'B' : index}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-white">{waypoint.name}</div>
-                      <div className="truncate text-xs text-slate-500">{waypoint.label}</div>
+                      <div className="truncate text-sm text-fg">{waypoint.name}</div>
+                      <div className="truncate text-xs text-subtle">{waypoint.label}</div>
                     </div>
                     <button
                       type="button"
                       disabled={index === 0}
                       onClick={() => onMoveWaypoint(waypoint.id, -1)}
                       aria-label={`Move ${waypoint.name} earlier`}
-                      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 disabled:opacity-25"
+                      className="shrink-0 rounded p-1 text-subtle hover:bg-strong disabled:opacity-25"
                     >
                       <ArrowUp className="h-3.5 w-3.5" />
                     </button>
@@ -316,7 +316,7 @@ export function SearchPanel({
                       disabled={index === waypoints.length - 1}
                       onClick={() => onMoveWaypoint(waypoint.id, 1)}
                       aria-label={`Move ${waypoint.name} later`}
-                      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 disabled:opacity-25"
+                      className="shrink-0 rounded p-1 text-subtle hover:bg-strong disabled:opacity-25"
                     >
                       <ArrowDown className="h-3.5 w-3.5" />
                     </button>
@@ -324,7 +324,7 @@ export function SearchPanel({
                       type="button"
                       onClick={() => onRemoveWaypoint(waypoint.id)}
                       aria-label={`Remove ${waypoint.name}`}
-                      className="shrink-0 rounded p-1 text-slate-400 hover:bg-slate-700 hover:text-rose-300"
+                      className="shrink-0 rounded p-1 text-subtle hover:bg-strong hover:text-rose-300"
                     >
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
@@ -338,7 +338,7 @@ export function SearchPanel({
             <button
               type="button"
               onClick={() => setShowOptions((value) => !value)}
-              className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-slate-400 hover:text-slate-200"
+              className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-subtle hover:text-muted"
             >
               <span className="flex items-center gap-2">
                 <SlidersHorizontal className="h-3.5 w-3.5" />
@@ -378,7 +378,7 @@ export function SearchPanel({
                     type="button"
                     onClick={() => onSetRole(place.id, (place as SavedPlace).role === 'home' ? null : 'home')}
                     aria-label={`Set ${place.name} as home`}
-                    className={cn('rounded p-1.5 hover:bg-slate-700', (place as SavedPlace).role === 'home' ? 'text-emerald-300' : 'text-slate-500')}
+                    className={cn('rounded p-1.5 hover:bg-strong', (place as SavedPlace).role === 'home' ? 'text-emerald-300' : 'text-subtle')}
                   >
                     <Home className="h-3.5 w-3.5" />
                   </button>
@@ -386,7 +386,7 @@ export function SearchPanel({
                     type="button"
                     onClick={() => onSetRole(place.id, (place as SavedPlace).role === 'work' ? null : 'work')}
                     aria-label={`Set ${place.name} as work`}
-                    className={cn('rounded p-1.5 hover:bg-slate-700', (place as SavedPlace).role === 'work' ? 'text-sky-300' : 'text-slate-500')}
+                    className={cn('rounded p-1.5 hover:bg-strong', (place as SavedPlace).role === 'work' ? 'text-sky-300' : 'text-subtle')}
                   >
                     <Briefcase className="h-3.5 w-3.5" />
                   </button>
@@ -394,7 +394,7 @@ export function SearchPanel({
                     type="button"
                     onClick={() => onToggleSaved(place)}
                     aria-label={`Remove ${place.name}`}
-                    className="rounded p-1.5 text-slate-500 hover:bg-slate-700 hover:text-rose-300"
+                    className="rounded p-1.5 text-subtle hover:bg-strong hover:text-rose-300"
                   >
                     <Trash2 className="h-3.5 w-3.5" />
                   </button>
@@ -407,7 +407,7 @@ export function SearchPanel({
             <div className="flex items-center justify-between">
               <SectionHeading>Recent</SectionHeading>
               {recents.length ? (
-                <button type="button" onClick={onClearRecents} className="text-xs text-slate-500 hover:text-slate-300">
+                <button type="button" onClick={onClearRecents} className="text-xs text-subtle hover:text-muted">
                   Clear
                 </button>
               ) : null}
@@ -418,7 +418,7 @@ export function SearchPanel({
               imperial={imperial}
               anchor={anchor}
               onSelect={onSetDestination}
-              icon={<Clock3 className="h-4 w-4 shrink-0 text-slate-500" />}
+              icon={<Clock3 className="h-4 w-4 shrink-0 text-subtle" />}
             />
           </section>
         </div>
@@ -428,7 +428,7 @@ export function SearchPanel({
 }
 
 function SectionHeading({ children }: { children: ReactNode }) {
-  return <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">{children}</div>;
+  return <div className="text-xs font-semibold uppercase tracking-[0.2em] text-subtle">{children}</div>;
 }
 
 function Chip({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
@@ -439,7 +439,7 @@ function Chip({ label, active, onClick }: { label: string; active: boolean; onCl
       aria-pressed={active}
       className={cn(
         'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
-        active ? 'border-sky-400 bg-sky-500/25 text-sky-100' : 'border-border bg-slate-800/70 text-slate-300 hover:bg-slate-700'
+        active ? 'border-sky-400 bg-sky-500/25 text-sky-100' : 'border-line bg-raised text-muted hover:bg-strong'
       )}
     >
       {label}
@@ -452,12 +452,12 @@ function RoleButton({ icon, place, onClick }: { icon: ReactNode; place: SavedPla
     <button
       type="button"
       onClick={onClick}
-      className="flex items-center gap-2 rounded-xl border border-border bg-slate-800/70 px-3 py-2.5 text-left transition hover:bg-slate-700"
+      className="flex items-center gap-2 rounded-xl border border-line bg-raised px-3 py-2.5 text-left transition hover:bg-strong"
     >
       <span className="text-sky-300">{icon}</span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-medium text-white">{place.name}</span>
-        <span className="block text-[11px] uppercase tracking-wider text-slate-500">{place.role}</span>
+        <span className="block truncate text-sm font-medium text-fg">{place.name}</span>
+        <span className="block text-[11px] uppercase tracking-wider text-subtle">{place.role}</span>
       </span>
     </button>
   );
@@ -481,18 +481,18 @@ function PlaceList({
   icon?: ReactNode;
 }) {
   if (!items.length) {
-    return <div className="mt-2 rounded-xl bg-slate-800/40 px-3 py-2.5 text-xs text-slate-500">{empty}</div>;
+    return <div className="mt-2 rounded-xl bg-raised px-3 py-2.5 text-xs text-subtle">{empty}</div>;
   }
 
   return (
     <div className="mt-2 space-y-1">
       {items.slice(0, 8).map((item) => (
-        <div key={item.id} className="flex items-center gap-1 rounded-xl hover:bg-slate-800/70">
+        <div key={item.id} className="flex items-center gap-1 rounded-xl hover:bg-strong">
           <button type="button" onClick={() => onSelect(item)} className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 text-left">
             {icon ?? <Star className="h-4 w-4 shrink-0 fill-current text-yellow-400/80" />}
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm text-white">{item.name}</span>
-              <span className="block truncate text-xs text-slate-500">
+              <span className="block truncate text-sm text-fg">{item.name}</span>
+              <span className="block truncate text-xs text-subtle">
                 {item.label}
                 {anchor ? ` · ${bearingCompass(anchor, item.coordinate, imperial)}` : ''}
               </span>

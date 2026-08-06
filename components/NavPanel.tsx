@@ -32,22 +32,22 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
       <div
         className={cn(
           'pointer-events-auto w-full max-w-2xl rounded-3xl border shadow-panel backdrop-blur transition-colors',
-          imminent ? 'border-sky-400/60 bg-sky-950/95' : 'border-border bg-slate-900/95'
+          imminent ? 'border-sky-400/60 bg-sky-950/95' : 'border-line bg-surface/95'
         )}
       >
         <div className="flex items-center gap-4 p-4">
           <div
             className={cn(
               'flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl transition-colors',
-              imminent ? 'bg-sky-400 text-slate-950' : 'bg-slate-800 text-sky-300'
+              imminent ? 'bg-sky-400 text-slate-950' : 'bg-raised text-sky-300'
             )}
           >
             <ManeuverIcon kind={step.kind} className="h-9 w-9" />
           </div>
 
           <div className="min-w-0 flex-1">
-            <div className="text-3xl font-semibold leading-none tabular-nums text-white">{distance}</div>
-            <div className="mt-1.5 truncate text-base text-slate-200">{step.instruction}</div>
+            <div className="text-3xl font-semibold leading-none tabular-nums text-fg">{distance}</div>
+            <div className="mt-1.5 truncate text-base text-muted">{step.instruction}</div>
 
             {sign ? (
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -57,7 +57,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
                   </span>
                 ))}
                 {[...sign.exitBranches, ...sign.exitToward].slice(0, 3).map((label) => (
-                  <span key={label} className="rounded-md bg-slate-700/70 px-2 py-0.5 text-xs font-medium text-slate-200">
+                  <span key={label} className="rounded-md bg-strong px-2 py-0.5 text-xs font-medium text-muted">
                     {label}
                   </span>
                 ))}
@@ -70,9 +70,9 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
               type="button"
               onClick={onToggleVoice}
               aria-label={voiceOn ? 'Mute voice guidance' : 'Unmute voice guidance'}
-              className="rounded-full border border-border bg-slate-800/90 p-2.5 text-slate-200 transition hover:bg-slate-700"
+              className="rounded-full border border-line bg-raised p-2.5 text-muted transition hover:bg-strong"
             >
-              {voiceOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 text-slate-500" />}
+              {voiceOn ? <Volume2 className="h-5 w-5" /> : <VolumeX className="h-5 w-5 text-subtle" />}
             </button>
             <button
               type="button"
@@ -86,7 +86,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
         </div>
 
         {next ? (
-          <div className="flex items-center gap-2.5 border-t border-border px-4 py-2.5 text-sm text-slate-400">
+          <div className="flex items-center gap-2.5 border-t border-line px-4 py-2.5 text-sm text-subtle">
             <span className="text-xs uppercase tracking-[0.18em]">Then</span>
             <ManeuverIcon kind={next.kind} className="h-4 w-4 shrink-0" />
             <span className="truncate">{next.streetNames[0] ?? next.instruction}</span>
@@ -103,7 +103,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
 
       {/* Trip status strip */}
       {progress ? (
-        <div className="pointer-events-auto flex items-center gap-5 rounded-full border border-border bg-slate-900/95 px-5 py-2.5 shadow-panel backdrop-blur">
+        <div className="pointer-events-auto flex items-center gap-5 rounded-full border border-line bg-surface px-5 py-2.5 shadow-panel">
           <Stat label="Arrive" value={formatEtaClock(progress.remainingSeconds)} />
           <Divider />
           <Stat label="Left" value={formatDuration(progress.remainingSeconds)} />
@@ -124,12 +124,12 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-slate-500">{label}</div>
-      <div className="text-base font-semibold tabular-nums text-white">{value}</div>
+      <div className="text-[10px] uppercase tracking-[0.18em] text-subtle">{label}</div>
+      <div className="text-base font-semibold tabular-nums text-fg">{value}</div>
     </div>
   );
 }
 
 function Divider() {
-  return <div className="h-7 w-px bg-slate-700" />;
+  return <div className="h-7 w-px bg-strong" />;
 }
