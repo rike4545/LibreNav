@@ -1147,7 +1147,24 @@ export function MapShell() {
               imperialLoop={preferences.imperial}
             />
 
-            <div className="sheet-scroll border-t border-line p-4">
+            {panelOpen && route && destination ? (
+              <button
+                type="button"
+                onClick={() => setPanelOpen(false)}
+                className="flex w-full items-center justify-between gap-3 border-t border-line px-4 py-3 text-left transition hover:bg-raised"
+              >
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold text-fg">{destination.name}</span>
+                  <span className="block text-xs text-subtle">
+                    {formatDurationMin(activeRouteSummary?.durationMin ?? 0)} ·{' '}
+                    {formatDistanceKm(activeRouteSummary?.distanceKm ?? 0, preferences.imperial)}
+                  </span>
+                </span>
+                <span className="shrink-0 text-xs font-semibold text-accent">Show trip</span>
+              </button>
+            ) : null}
+
+            <div className={cn('sheet-scroll border-t border-line p-4', panelOpen && route && 'hidden')}>
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 {routeLoading ? (
