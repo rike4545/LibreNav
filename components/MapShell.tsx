@@ -156,7 +156,9 @@ export function MapShell() {
   const arrivedRef = useRef(false);
   const autostartRef = useRef(false);
 
-  const [panelOpen, setPanelOpen] = useState(true);
+  // Start collapsed so the map is unobstructed on open; the search field
+  // stays visible, everything else is one tap away.
+  const [panelOpen, setPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -1219,6 +1221,7 @@ export function MapShell() {
               onLoopKmChange={setLoopKm}
               onGenerateLoop={() => void makeLoop()}
               imperialLoop={preferences.imperial}
+              showLoops={preferences.showLoops}
             />
 
             {panelOpen && route && destination ? (
@@ -1238,7 +1241,12 @@ export function MapShell() {
               </button>
             ) : null}
 
-            <div className={cn('sheet-scroll border-t border-line p-4', panelOpen && route && 'hidden')}>
+            <div
+              className={cn(
+                'sheet-scroll border-t border-line p-4',
+                (panelOpen && route) || (!route && !panelOpen && !routeLoading && !routeError) ? 'hidden' : ''
+              )}
+            >
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
                 {routeLoading ? (

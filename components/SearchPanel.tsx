@@ -64,6 +64,7 @@ type Props = {
   imperialLoop: boolean;
   onLoopKmChange: (km: number) => void;
   onGenerateLoop: () => void;
+  showLoops: boolean;
 };
 
 const MODES: Array<{ mode: TravelMode; label: string; icon: typeof Car }> = [
@@ -110,13 +111,15 @@ export function SearchPanel({
   loopBusy,
   imperialLoop,
   onLoopKmChange,
-  onGenerateLoop
+  onGenerateLoop,
+  showLoops
 }: Props) {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<SearchFeature[]>([]);
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showOptions, setShowOptions] = useState(false);
+  const [loopOpen, setLoopOpen] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
 
   // Debounced autocomplete. Each keystroke aborts the in-flight request so a
@@ -421,11 +424,22 @@ export function SearchPanel({
             ) : null}
           </section>
 
+          {showLoops ? (
           <section className="mt-4 rounded-2xl border border-line bg-raised p-3">
-            <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted">
-              <RefreshCw className="h-3.5 w-3.5" />
-              Round trip
-            </div>
+            <button
+              type="button"
+              onClick={() => setLoopOpen((value) => !value)}
+              aria-expanded={loopOpen}
+              className="flex w-full items-center justify-between gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-muted"
+            >
+              <span className="flex items-center gap-2">
+                <RefreshCw className="h-3.5 w-3.5" />
+                Round trip
+              </span>
+              <ChevronDown className={cn('h-4 w-4 transition', loopOpen && 'rotate-180')} />
+            </button>
+            {loopOpen ? (
+            <>
             <p className="mt-1.5 text-xs text-subtle">
               A loop from here and back — for a drive out, a meet, or a Sunday run.
             </p>
@@ -456,7 +470,10 @@ export function SearchPanel({
             <p className="mt-2 text-[11px] leading-relaxed text-subtle">
               Distance is approximate — roads rarely allow an exact loop. Press again for a different one.
             </p>
+            </>
+            ) : null}
           </section>
+          ) : null}
 
           {home || work ? (
             <section className="mt-4 grid grid-cols-2 gap-2">

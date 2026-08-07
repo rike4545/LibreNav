@@ -123,6 +123,12 @@ export function SettingsPanel({
             onChange={(value) => onPreferencesChange({ ...preferences, alertsEnabled: value })}
           />
           <Toggle
+            label="Round trip planner"
+            hint="Show the loop generator in the search panel."
+            checked={preferences.showLoops}
+            onChange={(value) => onPreferencesChange({ ...preferences, showLoops: value })}
+          />
+          <Toggle
             label="3D terrain"
             hint="Elevation shading from open AWS terrain tiles."
             checked={preferences.terrain3d}

@@ -36,6 +36,8 @@ export type Preferences = {
   terrain3d: boolean;
   /** Warn on approach to speed cameras and reported hazards. */
   alertsEnabled: boolean;
+  /** Show the round-trip generator. Off for drivers who never use it. */
+  showLoops: boolean;
 };
 
 export const defaultRouteOptions: RouteOptions = {
@@ -58,7 +60,8 @@ export const defaultPreferences: Preferences = {
   chargerConnector: null,
   chargerNetwork: null,
   terrain3d: false,
-  alertsEnabled: true
+  alertsEnabled: true,
+  showLoops: true
 };
 
 function safeRead<T>(key: string, fallback: T): T {
