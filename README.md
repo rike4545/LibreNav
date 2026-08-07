@@ -42,6 +42,7 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Filter out chargers below a power threshold
 - Range estimate against your vehicle profile, with a warning and a one-tap "find chargers along this route"
 - Elevation-aware energy: climbs are added to the estimate, descents partly recovered
+- Automatic charging stops when the trip is beyond your charge, inserted in route order
 
 **Trip conditions**
 - Weather at your destination for the time you actually arrive, not the time you leave
@@ -168,6 +169,10 @@ Worth knowing before you rely on it:
   The delay assumes a 50 km/h free-flow baseline, since Valhalla reports one duration for the whole
   route rather than per segment, so treat it as an estimate.
 - **No live charger availability.** Charger details are OSM tags, which can be incomplete or stale.
+- **Charging stops are a suggestion, not a plan.** They assume charging to 80%, spread the climb
+  cost evenly along the route rather than per segment, and pick chargers on OSM data that may be
+  wrong about power or may not exist. Trips needing more than four stops are declined rather than
+  guessed at.
 - **The range model is approximate.** It now accounts for elevation — measured on a 69 km Alpine
   route, the climb adds 57% over the flat-rate figure — but still ignores temperature, speed, and
   payload. Treat it as a planning hint, not a guarantee.

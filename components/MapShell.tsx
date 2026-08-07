@@ -71,6 +71,7 @@ import { emitToHost, listenToHost, readEmbedConfig, routeEvent, stopsToWaypoints
 import { downloadGpx, trackDistanceKm } from '@/lib/gpx';
 import type { TripRecord } from '@/lib/storage';
 import { estimateTrafficDelay } from '@/lib/traffic';
+import { ChargePlanError, chargersToWaypoints, planChargingStops } from '@/lib/services/chargeplan';
 import { ElevationProfile, climbEnergyKwh, fetchElevationProfile } from '@/lib/services/elevation';
 import { StopWeather, aqiTone, fetchWeatherAt } from '@/lib/services/weather';
 import { decodeTrip, encodeTrip, estimateRange } from '@/lib/trip';
@@ -140,6 +141,7 @@ export function MapShell() {
   const [trafficThrottled, setTrafficThrottled] = useState(false);
   const [weather, setWeather] = useState<StopWeather | null>(null);
   const [elevation, setElevation] = useState<ElevationProfile | null>(null);
+  const [planningCharge, setPlanningCharge] = useState(false);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => getVoiceSettings());
   const [reportOpen, setReportOpen] = useState(false);
   const [track, setTrack] = useState<TrackPoint[]>([]);
@@ -836,6 +838,40 @@ export function MapShell() {
     }
   }
 
+  /**
+   * Insert the charging stops the trip needs.
+   *
+   * Planned against the current route in one pass, then inserted together so
+   * routing runs once rather than per stop.
+   */
+  async function addChargingStops() {
+    if (!route || waypoints.length < 2) return;
+    setPlanningCharge(true);
+
+    try {
+      const climb = elevation ? climbEnergyKwh(elevation.ascentM, elevation.descentM) : 0;
+      const plan = await planChargingStops(route, vehicle, climb);
+
+      if (!plan.stops.length) {
+        showToast(plan.note ?? 'No charging stop needed for this trip.');
+        return;
+      }
+
+      setWaypoints((current) => [
+        ...current.slice(0, -1),
+        ...chargersToWaypoints(plan.stops),
+        current[current.length - 1]
+      ]);
+
+      const summary = `Added ${plan.stops.length} charging stop${plan.stops.length > 1 ? 's' : ''}`;
+      showToast(plan.incomplete && plan.note ? `${summary}. ${plan.note}` : summary);
+    } catch (cause) {
+      showToast(cause instanceof ChargePlanError ? cause.message : 'Could not plan charging stops.');
+    } finally {
+      setPlanningCharge(false);
+    }
+  }
+
   function toggleRecording() {
     if (recording) {
       setRecording(false);
@@ -1406,13 +1442,26 @@ export function MapShell() {
                         for {formatDistanceM(elevation.ascentM, preferences.imperial)} of climb.
                       </p>
                     ) : null}
-                    <button
-                      type="button"
-                      onClick={() => handleCategory('charging', true)}
-                      className="mt-2 text-xs font-semibold text-accent underline-offset-2 hover:underline"
-                    >
-                      Find chargers along this route
-                    </button>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      {!range.reachable ? (
+                        <button
+                          type="button"
+                          onClick={() => void addChargingStops()}
+                          disabled={planningCharge}
+                          className="flex items-center gap-1.5 rounded-full bg-sky-500 px-3 py-1.5 text-xs font-bold text-slate-950 transition hover:bg-sky-400 disabled:opacity-60"
+                        >
+                          {planningCharge ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Zap className="h-3.5 w-3.5" />}
+                          {planningCharge ? 'Planning…' : 'Add charging stops'}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => handleCategory('charging', true)}
+                        className="text-xs font-semibold text-accent underline-offset-2 hover:underline"
+                      >
+                        Find chargers along this route
+                      </button>
+                    </div>
                   </div>
                 ) : null}
               </div>
