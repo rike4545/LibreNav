@@ -9,6 +9,7 @@ const OPTIONS_KEY = 'librenav.options';
 const PREFS_KEY = 'librenav.prefs';
 const VEHICLE_KEY = 'librenav.vehicle';
 const VOICE_KEY = 'librenav.voice';
+const TRIPS_KEY = 'librenav.trips';
 
 export type SavedPlace = SearchFeature & {
   /** 'home' and 'work' are pinned; everything else is a plain favorite. */
@@ -167,6 +168,33 @@ export function getVoiceSettings(): VoiceSettings {
 export function saveVoiceSettings(settings: VoiceSettings): VoiceSettings {
   safeWrite(VOICE_KEY, settings);
   return settings;
+}
+
+/** A completed drive, kept so the log survives the export. */
+export type TripRecord = {
+  id: string;
+  startedAt: string;
+  endedAt: string;
+  distanceKm: number;
+  durationMin: number;
+  averageKmh: number;
+  destination?: string;
+};
+
+export function getTrips(): TripRecord[] {
+  return safeRead<TripRecord[]>(TRIPS_KEY, []);
+}
+
+export function saveTrip(trip: TripRecord): TripRecord[] {
+  // Cap the log; this is a driving app, not an archive.
+  const next = [trip, ...getTrips()].slice(0, 100);
+  safeWrite(TRIPS_KEY, next);
+  return next;
+}
+
+export function clearTrips(): TripRecord[] {
+  safeWrite(TRIPS_KEY, []);
+  return [];
 }
 
 export function getVehicle(): VehicleProfile {

@@ -1,10 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BatteryCharging, Coffee, Globe, KeyRound, Play, RotateCcw, Server, Volume2, X } from 'lucide-react';
+import { BatteryCharging, Coffee, Globe, History, KeyRound, Play, RotateCcw, Server, Volume2, X } from 'lucide-react';
 import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, getLocalDataKey, resetEndpoints, saveEndpoints, saveLocalDataKey } from '@/lib/config';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
-import { Preferences, ThemeChoice } from '@/lib/storage';
+import { Preferences, ThemeChoice, TripRecord } from '@/lib/storage';
 import { VoiceSettings, listVoices, onVoicesChanged, previewVoice, speechSupported } from '@/lib/voice';
 import { cn } from '@/lib/utils';
 import { VehicleProfile } from '@/types/map';
@@ -15,6 +15,9 @@ type Props = {
   /** Networks seen in the currently loaded chargers. */
   chargerNetworks: string[];
   voiceSettings: VoiceSettings;
+  trips: TripRecord[];
+  imperial: boolean;
+  onClearTrips: () => void;
   onVoiceSettingsChange: (settings: VoiceSettings) => void;
   onPreferencesChange: (preferences: Preferences) => void;
   onVehicleChange: (vehicle: VehicleProfile) => void;
@@ -26,6 +29,9 @@ export function SettingsPanel({
   vehicle,
   chargerNetworks,
   voiceSettings,
+  trips,
+  imperial,
+  onClearTrips,
   onVoiceSettingsChange,
   onPreferencesChange,
   onVehicleChange,
@@ -248,6 +254,45 @@ export function SettingsPanel({
           <NumberField label="Consumption" suffix="kWh/100km" value={vehicle.consumptionKwh100km} min={5} max={45} step={0.5} onChange={(v) => onVehicleChange({ ...vehicle, consumptionKwh100km: v })} />
           <NumberField label="Current charge" suffix="%" value={vehicle.socPercent} min={0} max={100} step={1} onChange={(v) => onVehicleChange({ ...vehicle, socPercent: v })} />
           <NumberField label="Arrival reserve" suffix="%" value={vehicle.reservePercent} min={0} max={50} step={1} onChange={(v) => onVehicleChange({ ...vehicle, reservePercent: v })} />
+        </Section>
+
+        <Section title="Drive history" icon={<History className="h-4 w-4" />}>
+          {trips.length ? (
+            <>
+              <div className="space-y-1.5">
+                {trips.slice(0, 8).map((trip) => (
+                  <div key={trip.id} className="rounded-xl bg-raised px-3 py-2">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="truncate text-sm text-fg">{trip.destination ?? 'Drive'}</span>
+                      <span className="shrink-0 text-xs tabular-nums text-subtle">
+                        {new Date(trip.startedAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-xs text-subtle">
+                      {imperial
+                        ? `${(trip.distanceKm * 0.621371).toFixed(1)} mi`
+                        : `${trip.distanceKm.toFixed(1)} km`}{' '}
+                      · {Math.round(trip.durationMin)} min · avg{' '}
+                      {imperial
+                        ? `${Math.round(trip.averageKmh * 0.621371)} mph`
+                        : `${Math.round(trip.averageKmh)} km/h`}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={onClearTrips}
+                className="mt-3 rounded-full border border-line bg-raised px-4 py-2 text-sm font-medium text-muted transition hover:bg-strong"
+              >
+                Clear history
+              </button>
+            </>
+          ) : (
+            <p className="text-xs text-subtle">
+              Drives are logged when you stop a recording. Tap the record button in the header to start one.
+            </p>
+          )}
         </Section>
 
         <Section title="Service endpoints" icon={<Server className="h-4 w-4" />}>

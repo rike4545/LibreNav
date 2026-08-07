@@ -41,6 +41,7 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Detail cards with connector types, power, operator, bay count, access, fee, and hours from OSM tags
 - Filter out chargers below a power threshold
 - Range estimate against your vehicle profile, with a warning and a one-tap "find chargers along this route"
+- Elevation-aware energy: climbs are added to the estimate, descents partly recovered
 
 **Trip conditions**
 - Weather at your destination for the time you actually arrive, not the time you leave
@@ -59,6 +60,7 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Report police, crashes, traffic, hazards, closures, or cameras at your location
 - Reports show on the map by type, alert you on approach, and expire after a day
 - Record your drive and export it as a GPX file
+- Drive history with distance, duration, and average speed
 
 **Trip planning**
 - Multi-stop routing with reorder and remove
@@ -92,7 +94,7 @@ the browser directly against public, CORS-enabled OSM services in `lib/services/
 | Basemap | MapLibre styles | OpenFreeMap and CARTO, key-less |
 | Speed limits | Valhalla `trace_attributes` | one call per route, `edge_walk` |
 | Speed cameras | Overpass | `highway=speed_camera` along the route |
-| Elevation | AWS Terrain Tiles | Terrarium DEM, open data |
+| Elevation | AWS Terrain Tiles (3D) · Valhalla `/height` (profile) | open data, keyless |
 | Live traffic (optional) | OpenWeb Ninja | licensed Waze feed, your key, browser-side |
 | Weather & air quality | Open-Meteo | keyless, forecast at arrival time |
 
@@ -128,6 +130,12 @@ Use the local dev server (`npm run dev`) when running a self-hosted stack, not t
 You can also bake different defaults in at build time with `NEXT_PUBLIC_VALHALLA_URL`,
 `NEXT_PUBLIC_PHOTON_URL`, `NEXT_PUBLIC_OVERPASS_URL`, and `NEXT_PUBLIC_MAP_STYLE_URL`.
 
+## Embedding in another app
+
+`examples/ios/` has a Swift/WKWebView integration with a typed bridge in both
+directions. The same contract works from an iframe or React Native — see
+`lib/embed.ts`. Add `?embed=1` to hide chrome the host provides itself.
+
 ## Optional: live traffic and richer places
 
 **Settings → Place data key** accepts an [OpenWeb Ninja](https://www.openwebninja.com) key, which
@@ -160,8 +168,9 @@ Worth knowing before you rely on it:
   The delay assumes a 50 km/h free-flow baseline, since Valhalla reports one duration for the whole
   route rather than per segment, so treat it as an estimate.
 - **No live charger availability.** Charger details are OSM tags, which can be incomplete or stale.
-- **The range model is deliberately simple** — usable charge over a flat consumption rate. It ignores
-  elevation, temperature, and speed. Treat it as a planning hint.
+- **The range model is approximate.** It now accounts for elevation — measured on a 69 km Alpine
+  route, the climb adds 57% over the flat-rate figure — but still ignores temperature, speed, and
+  payload. Treat it as a planning hint, not a guarantee.
 - **Public services are fair-use.** Heavy or commercial traffic should self-host or arrange its own
   instances rather than leaning on FOSSGIS and Komoot.
 - **Hazard reports are local only.** They stay in your browser and expire after 24 hours.

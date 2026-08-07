@@ -54,19 +54,24 @@ import {
   getRouteOptions,
   getSavedPlaces,
   getVehicle,
+  clearTrips,
+  getTrips,
   getVoiceSettings,
   pushRecent,
   savePreferences,
   saveReport,
   saveRouteOptions,
   saveVehicle,
+  saveTrip,
   saveVoiceSettings,
   setPlaceRole,
   toggleSavedPlace
 } from '@/lib/storage';
 import { emitToHost, listenToHost, readEmbedConfig, routeEvent, stopsToWaypoints } from '@/lib/embed';
 import { downloadGpx, trackDistanceKm } from '@/lib/gpx';
+import type { TripRecord } from '@/lib/storage';
 import { estimateTrafficDelay } from '@/lib/traffic';
+import { ElevationProfile, climbEnergyKwh, fetchElevationProfile } from '@/lib/services/elevation';
 import { StopWeather, aqiTone, fetchWeatherAt } from '@/lib/services/weather';
 import { decodeTrip, encodeTrip, estimateRange } from '@/lib/trip';
 import { VoiceSettings, configureVoice, primeSpeech, speak, stopSpeaking } from '@/lib/voice';
@@ -134,10 +139,12 @@ export function MapShell() {
   const [jams, setJams] = useState<TrafficJam[]>([]);
   const [trafficThrottled, setTrafficThrottled] = useState(false);
   const [weather, setWeather] = useState<StopWeather | null>(null);
+  const [elevation, setElevation] = useState<ElevationProfile | null>(null);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => getVoiceSettings());
   const [reportOpen, setReportOpen] = useState(false);
   const [track, setTrack] = useState<TrackPoint[]>([]);
   const [recording, setRecording] = useState(false);
+  const [trips, setTrips] = useState<TripRecord[]>([]);
   const [loopKm, setLoopKm] = useState(40);
   const [loopBusy, setLoopBusy] = useState(false);
   const loopRotationRef = useRef(0);
@@ -237,6 +244,7 @@ export function MapShell() {
     setSaved(getSavedPlaces());
     setRecents(getRecents());
     setReports(getReports());
+    setTrips(getTrips());
   }, []);
 
   /* ------------------------------------------------------- geolocation */
@@ -365,6 +373,7 @@ export function MapShell() {
     if (!route) {
       setSpeedLimits([]);
       setCameras([]);
+      setElevation(null);
       return;
     }
 
@@ -379,6 +388,10 @@ export function MapShell() {
     fetchSpeedCameras(route.coordinates, 0.4, controller.signal)
       .then(setCameras)
       .catch(() => setCameras([]));
+
+    fetchElevationProfile(route.coordinates, controller.signal)
+      .then(setElevation)
+      .catch(() => setElevation(null));
 
     return () => controller.abort();
   }, [route]);
@@ -729,6 +742,7 @@ export function MapShell() {
     setLiveAlerts([]);
     setJams([]);
     setWeather(null);
+    setElevation(null);
     navIndexRef.current = null;
     announcedRef.current.clear();
     announcedAlertsRef.current.clear();
@@ -826,6 +840,24 @@ export function MapShell() {
     if (recording) {
       setRecording(false);
       if (track.length > 1) {
+        const startedAt = track[0].at;
+        const endedAt = track[track.length - 1].at;
+        const distanceKm = trackDistanceKm(track);
+        const durationMin = Math.max(0, (endedAt - startedAt) / 60_000);
+        setTrips(
+          saveTrip({
+            id: `trip-${startedAt}`,
+            startedAt: new Date(startedAt).toISOString(),
+            endedAt: new Date(endedAt).toISOString(),
+            distanceKm,
+            durationMin,
+            // Guard the divide: a track can start and end in the same minute.
+            averageKmh: durationMin > 0 ? distanceKm / (durationMin / 60) : 0,
+            destination: destination?.name
+          })
+        );
+      }
+      if (track.length > 1) {
         downloadGpx(track, `LibreNav ${new Date().toISOString().slice(0, 16).replace('T', ' ')}`);
         showToast(`Exported ${track.length} points (${formatDistanceKm(trackDistanceKm(track), preferences.imperial)}).`);
       } else {
@@ -879,7 +911,10 @@ export function MapShell() {
     };
   }, [route, activeAlternativeId]);
 
-  const range = useMemo(() => estimateRange(route, vehicle), [route, vehicle]);
+  const range = useMemo(() => {
+    const climb = elevation ? climbEnergyKwh(elevation.ascentM, elevation.descentM) : 0;
+    return estimateRange(route, vehicle, climb);
+  }, [route, vehicle, elevation]);
 
   /** Delay from jams that genuinely sit on this route. */
   const trafficDelay = useMemo(
@@ -1105,6 +1140,9 @@ export function MapShell() {
             vehicle={vehicle}
             chargerNetworks={chargerNetworks}
             voiceSettings={voiceSettings}
+            trips={trips}
+            imperial={preferences.imperial}
+            onClearTrips={() => setTrips(clearTrips())}
             onVoiceSettingsChange={(next) => setVoiceSettings(saveVoiceSettings(next))}
             onPreferencesChange={updatePreferences}
             onVehicleChange={(next) => setVehicle(saveVehicle(next))}
@@ -1361,6 +1399,13 @@ export function MapShell() {
                           : 'This trip is beyond your current charge. Add a charging stop.'}
                       </p>
                     )}
+                    {elevation && Math.abs(range.climbKwh) > 0.3 ? (
+                      <p className="mt-1.5 text-xs text-muted">
+                        {range.climbKwh > 0 ? 'Includes' : 'Net descent recovers'}{' '}
+                        <strong className="tabular-nums">{Math.abs(range.climbKwh).toFixed(1)} kWh</strong>{' '}
+                        for {formatDistanceM(elevation.ascentM, preferences.imperial)} of climb.
+                      </p>
+                    ) : null}
                     <button
                       type="button"
                       onClick={() => handleCategory('charging', true)}

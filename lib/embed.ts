@@ -4,8 +4,11 @@ import { Coordinate, RouteResponse, VehicleProfile, Waypoint } from '@/types/map
  * Host-app bridge.
  *
  * LibreNav is a web app, so the way to put it inside another app is a WebView
- * (iOS WKWebView, Android WebView, React Native) or an iframe. All of those
- * speak postMessage, so one contract covers every host.
+ * (iOS WKWebView, Android WebView, React Native) or an iframe. One contract
+ * covers all of them, but the outbound channel differs: WKWebView uses a
+ * script-message handler, React Native its own bridge, and an iframe the real
+ * parent frame. Inbound is window.postMessage everywhere, which Swift reaches
+ * through evaluateJavaScript.
  *
  * Two channels, deliberately: the URL for the initial state (which survives a
  * cold start and a reload), and postMessage for anything after that.
@@ -67,6 +70,12 @@ export type AppEvent =
 
 type ReactNativeBridge = { postMessage: (payload: string) => void };
 
+/** WKWebView's channel: window.webkit.messageHandlers.<name>.postMessage(). */
+type WebKitBridge = { messageHandlers?: Record<string, { postMessage: (payload: unknown) => void }> };
+
+/** Script-message handler name the Swift host registers. */
+export const WEBKIT_HANDLER = 'librenav';
+
 /**
  * Send an event to whatever is hosting us.
  *
@@ -76,6 +85,18 @@ type ReactNativeBridge = { postMessage: (payload: string) => void };
  */
 export function emitToHost(event: AppEvent, config: EmbedConfig) {
   if (typeof window === 'undefined' || !config.embedded) return;
+
+  // WKWebView has no usable parent frame and no RN bridge — it listens on its
+  // own script-message handler, so a Swift host needs this path specifically.
+  const webkit = (window as unknown as { webkit?: WebKitBridge }).webkit;
+  const handler = webkit?.messageHandlers?.[WEBKIT_HANDLER];
+  if (handler) {
+    try {
+      handler.postMessage(event);
+    } catch {
+      /* Handler removed while navigating away. */
+    }
+  }
 
   const rn = (window as unknown as { ReactNativeWebView?: ReactNativeBridge }).ReactNativeWebView;
   if (rn?.postMessage) {
