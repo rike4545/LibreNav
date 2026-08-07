@@ -45,6 +45,7 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 **Trip conditions**
 - Weather at your destination for the time you actually arrive, not the time you leave
 - Warnings for ice, snow, poor visibility, heavy rain, and strong wind
+- Air quality (US AQI) at arrival, banded and warned on when unhealthy
 - Installable, and opens without a signal once cached
 
 **Live traffic (optional, your own key)**
@@ -93,7 +94,7 @@ the browser directly against public, CORS-enabled OSM services in `lib/services/
 | Speed cameras | Overpass | `highway=speed_camera` along the route |
 | Elevation | AWS Terrain Tiles | Terrarium DEM, open data |
 | Live traffic (optional) | OpenWeb Ninja | licensed Waze feed, your key, browser-side |
-| Weather | Open-Meteo | keyless, forecast at arrival time |
+| Weather & air quality | Open-Meteo | keyless, forecast at arrival time |
 
 This is what makes the public link work for anyone who opens it, and it's also why the app has no
 signup: there is no backend to sign up to.

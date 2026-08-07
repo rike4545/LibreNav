@@ -67,7 +67,7 @@ import {
 import { emitToHost, listenToHost, readEmbedConfig, routeEvent, stopsToWaypoints } from '@/lib/embed';
 import { downloadGpx, trackDistanceKm } from '@/lib/gpx';
 import { estimateTrafficDelay } from '@/lib/traffic';
-import { StopWeather, fetchWeatherAt } from '@/lib/services/weather';
+import { StopWeather, aqiTone, fetchWeatherAt } from '@/lib/services/weather';
 import { decodeTrip, encodeTrip, estimateRange } from '@/lib/trip';
 import { VoiceSettings, configureVoice, primeSpeech, speak, stopSpeaking } from '@/lib/voice';
 import { releaseWakeLock, requestWakeLock } from '@/lib/wakelock';
@@ -1322,6 +1322,16 @@ export function MapShell() {
                         ? `, ${Math.round(preferences.imperial ? weather.temperatureC * 1.8 + 32 : weather.temperatureC)}°${preferences.imperial ? 'F' : 'C'}`
                         : ''}
                     </p>
+                    {/* Omitted entirely where the model has no reading, since a
+                        blank chip would read as clean air rather than no data. */}
+                    {weather.aqi !== null ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                        <span className={cn('rounded-full px-2 py-0.5 text-xs font-bold', aqiTone(weather.aqi))}>
+                          AQI {weather.aqi}
+                        </span>
+                        <span className="text-xs text-muted">{weather.aqiLabel}</span>
+                      </div>
+                    ) : null}
                     {weather.caution ? (
                       <p className="mt-1 text-sm font-semibold text-fg">{weather.caution}</p>
                     ) : null}

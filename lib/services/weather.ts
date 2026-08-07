@@ -6,6 +6,7 @@ import { Coordinate } from '@/types/map';
  */
 
 const BASE = 'https://api.open-meteo.com/v1/forecast';
+const AIR_BASE = 'https://air-quality-api.open-meteo.com/v1/air-quality';
 
 export type StopWeather = {
   /** Epoch ms the forecast is for. */
@@ -16,10 +17,38 @@ export type StopWeather = {
   /** Metres; low values are the interesting case for driving. */
   visibilityM: number | null;
   code: number | null;
+  /** US AQI at the same hour, where the air-quality model covers the area. */
+  aqi: number | null;
+  aqiLabel: string | null;
+  pm25: number | null;
   summary: string;
   /** Set when conditions are worth flagging before setting off. */
   caution: string | null;
 };
+
+/**
+ * US AQI bands, as published by the EPA. Using the US scale rather than the
+ * European one because its categories are the widely recognised wording.
+ */
+export function aqiBand(aqi: number | null): string | null {
+  if (aqi === null) return null;
+  if (aqi <= 50) return 'Good';
+  if (aqi <= 100) return 'Moderate';
+  if (aqi <= 150) return 'Unhealthy for sensitive groups';
+  if (aqi <= 200) return 'Unhealthy';
+  if (aqi <= 300) return 'Very unhealthy';
+  return 'Hazardous';
+}
+
+/** Colour band for the AQI chip, matching the EPA scale. */
+export function aqiTone(aqi: number | null): string {
+  if (aqi === null) return 'bg-raised text-muted';
+  if (aqi <= 50) return 'bg-emerald-500/25 text-fg';
+  if (aqi <= 100) return 'bg-yellow-500/25 text-fg';
+  if (aqi <= 150) return 'bg-orange-500/30 text-fg';
+  if (aqi <= 200) return 'bg-rose-500/30 text-fg';
+  return 'bg-purple-500/30 text-fg';
+}
 
 /** WMO weather codes, condensed to what a driver needs. */
 function describe(code: number | null): string {
@@ -39,7 +68,10 @@ function describe(code: number | null): string {
  * Driving hazards, in descending order of seriousness. Freezing takes priority
  * over precipitation: wet at 1°C is a very different drive from wet at 12°C.
  */
-function cautionFor(w: Omit<StopWeather, 'caution' | 'summary'>): string | null {
+function cautionFor(w: Omit<StopWeather, 'caution' | 'summary' | 'aqiLabel'>): string | null {
+  // Unhealthy air matters most to anyone who'd otherwise drive with windows
+  // down, so it ranks above the milder weather warnings.
+  if ((w.aqi ?? 0) > 150) return `Poor air quality (AQI ${w.aqi})`;
   const freezing = w.temperatureC !== null && w.temperatureC <= 1;
   const wet = (w.precipitationMm ?? 0) > 0.2;
 
@@ -105,14 +137,63 @@ export async function fetchWeatherAt(
 
   const pick = <T,>(list: (T | null)[] | undefined): T | null => (list ? (list[best] ?? null) : null);
 
+  const air = await fetchAirQuality(point, Number(hourly.time[best]), signal);
+
   const base = {
     at: Number(hourly.time[best]) * 1000,
     temperatureC: pick(hourly.temperature_2m),
     precipitationMm: pick(hourly.precipitation),
     windKmh: pick(hourly.wind_speed_10m),
     visibilityM: pick(hourly.visibility),
-    code: pick(hourly.weather_code)
+    code: pick(hourly.weather_code),
+    aqi: air.aqi,
+    aqiLabel: aqiBand(air.aqi),
+    pm25: air.pm25
   };
 
   return { ...base, summary: describe(base.code), caution: cautionFor(base) };
+}
+
+/**
+ * US AQI at the given hour.
+ *
+ * Separate endpoint from the forecast, and its model does not cover every
+ * region — a null here means "no data", not "clean air", so the UI omits the
+ * chip rather than implying a reading.
+ */
+async function fetchAirQuality(
+  point: Coordinate,
+  targetUnixSeconds: number,
+  signal?: AbortSignal
+): Promise<{ aqi: number | null; pm25: number | null }> {
+  const url = new URL(AIR_BASE);
+  url.searchParams.set('latitude', point.lat.toFixed(4));
+  url.searchParams.set('longitude', point.lng.toFixed(4));
+  url.searchParams.set('hourly', 'us_aqi,pm2_5');
+  url.searchParams.set('timeformat', 'unixtime');
+  url.searchParams.set('timezone', 'UTC');
+  url.searchParams.set('forecast_days', '2');
+
+  const response = await fetch(url, { signal }).catch(() => null);
+  if (!response?.ok) return { aqi: null, pm25: null };
+
+  const payload = (await response.json().catch(() => null)) as {
+    hourly?: { time?: number[]; us_aqi?: (number | null)[]; pm2_5?: (number | null)[] };
+  } | null;
+
+  const hourly = payload?.hourly;
+  if (!hourly?.time?.length) return { aqi: null, pm25: null };
+
+  let best = 0;
+  let bestGap = Infinity;
+  hourly.time.forEach((value, index) => {
+    const gap = Math.abs(Number(value) - targetUnixSeconds);
+    if (gap < bestGap) {
+      bestGap = gap;
+      best = index;
+    }
+  });
+
+  const aqi = hourly.us_aqi?.[best] ?? null;
+  return { aqi: typeof aqi === 'number' ? Math.round(aqi) : null, pm25: hourly.pm2_5?.[best] ?? null };
 }
