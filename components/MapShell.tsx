@@ -1287,7 +1287,7 @@ export function MapShell() {
                 )}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="-mx-1 flex w-full items-center gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:w-auto sm:flex-wrap sm:overflow-visible sm:px-0">
                 <IconButton label="Recenter" onClick={() => setRecenterToken((token) => token + 1)}>
                   <LocateFixed className="h-4 w-4" />
                 </IconButton>
@@ -1324,27 +1324,37 @@ export function MapShell() {
                   <ShieldAlert className="h-4 w-4" />
                 </IconButton>
 
-                {waypoints.length > 1 ? (
-                  <IconButton label="Cancel" onClick={clearRoute}>
-                    <XCircle className="h-4 w-4" />
-                  </IconButton>
-                ) : null}
-
-                {route ? (
-                  <button
-                    type="button"
-                    onClick={toggleNavigation}
-                    className="flex items-center gap-2 rounded-full bg-sky-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-sky-400"
-                  >
-                    <Navigation className="h-4 w-4" />
-                    Start
-                  </button>
-                ) : null}
               </div>
+
+              {route || waypoints.length > 1 ? (
+                <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto">
+                  {waypoints.length > 1 ? (
+                    <button
+                      type="button"
+                      onClick={clearRoute}
+                      className="flex items-center justify-center gap-1.5 rounded-full border border-rose-500/40 bg-rose-500/15 px-4 py-2.5 text-sm font-semibold text-fg transition hover:bg-rose-500/25"
+                    >
+                      <XCircle className="h-4 w-4" />
+                      Cancel
+                    </button>
+                  ) : null}
+
+                  {route ? (
+                    <button
+                      type="button"
+                      onClick={toggleNavigation}
+                      className="flex flex-1 items-center justify-center gap-2 rounded-full bg-sky-500 px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-sky-400 sm:flex-initial"
+                    >
+                      <Navigation className="h-4 w-4" />
+                      Start
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
 
             {route && route.alternatives.length ? (
-              <div className="mt-3 flex flex-wrap gap-1.5">
+              <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
                 <AlternateChip active={activeAlternativeId === null} onClick={() => setActiveAlternativeId(null)}>
                   Fastest · {formatDurationMin(route.summary.durationMin)}
                 </AlternateChip>
@@ -1361,7 +1371,7 @@ export function MapShell() {
             ) : null}
 
             {route ? (
-              <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,1fr)_15rem_15rem]">
+              <div className="mt-3 grid grid-cols-[minmax(0,1fr)] gap-3 lg:grid-cols-[minmax(0,1fr)_15rem_15rem]">
                 {/* minmax(0,…) lets the turn list shrink; a bare 1fr floors at its
                     longest instruction and pushes the range card off-panel. */}
                 <div className="rounded-2xl border border-line bg-raised p-3">
@@ -1487,10 +1497,10 @@ function IconButton({ label, onClick, children }: { label: string; onClick: () =
       onClick={onClick}
       title={label}
       aria-label={label}
-      className="flex items-center gap-2 rounded-full border border-line bg-raised px-3.5 py-2.5 text-sm font-medium text-muted transition hover:bg-strong"
+      className="flex shrink-0 items-center gap-1.5 rounded-full border border-line bg-raised px-3 py-2 text-xs font-medium text-muted transition hover:bg-strong sm:gap-2 sm:px-3.5 sm:py-2.5 sm:text-sm"
     >
       {children}
-      <span className="hidden sm:inline">{label}</span>
+      <span>{label}</span>
     </button>
   );
 }
@@ -1502,7 +1512,7 @@ function AlternateChip({ active, onClick, children }: { active: boolean; onClick
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        'rounded-full px-3 py-1.5 text-xs font-semibold transition',
+        'shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition',
         active ? 'bg-sky-500 text-slate-950' : 'bg-strong text-muted hover:bg-strong'
       )}
     >

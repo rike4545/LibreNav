@@ -91,6 +91,13 @@ body {
   overflow: hidden;
 }
 
+@media (max-width: 640px) {
+  .sheet-max {
+    /* The map is the product; the sheet should not bury it. */
+    max-height: min(62dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 5rem));
+  }
+}
+
 .sheet-scroll {
   flex: 1 1 auto;
   /* Without this a flex child refuses to shrink below its content height, so
