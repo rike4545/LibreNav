@@ -195,7 +195,7 @@ export function SearchPanel({
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           onFocus={() => onOpenChange(true)}
-          placeholder="Search places, addresses, or coordinates"
+          placeholder="Search places, addresses, coordinates, or Plus Codes"
           aria-label="Search for a destination"
           className="w-full border-0 bg-transparent text-base text-fg outline-none placeholder:text-subtle"
         />

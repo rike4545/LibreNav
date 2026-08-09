@@ -99,7 +99,7 @@ export function positionAlertsOnRoute(
 ): RoadAlert[] {
   if (path.length < 2) return [];
 
-  return alerts
+  const positioned = alerts
     .map((alert) => {
       const match = nearestOnPath(alert.coordinate, path);
       if (!match || match.offsetM > maxOffsetM) return null;
@@ -107,6 +107,66 @@ export function positionAlertsOnRoute(
     })
     .filter((value): value is RoadAlert & { distanceAlongM: number } => value !== null)
     .sort((a, b) => a.distanceAlongM - b.distanceAlongM);
+
+  return dedupeAlerts(positioned);
+}
+
+/**
+ * Which source to believe when two reports describe the same thing.
+ *
+ * OSM cameras are surveyed and carry the posted limit, so they beat a live
+ * report of the same camera. A crowd-confirmed Waze report beats one person's
+ * own tap on this device.
+ */
+const SOURCE_RANK: Record<RoadAlert['source'], number> = { osm: 3, waze: 2, local: 1 };
+
+/** Two same-kind alerts within this far along the route are one thing. */
+const DUPLICATE_WINDOW_M = 80;
+
+/**
+ * Collapse duplicate reports of a single hazard.
+ *
+ * The alert list is three sources concatenated, so a fixed camera in OSM, the
+ * live report of it, and the driver's own pin all describe one thing and would
+ * otherwise warn three times on one approach. Expects the list already
+ * positioned and sorted by distance along the route.
+ */
+export function dedupeAlerts(alerts: Array<RoadAlert & { distanceAlongM: number }>): RoadAlert[] {
+  const kept: Array<RoadAlert & { distanceAlongM: number }> = [];
+
+  for (const alert of alerts) {
+    // Sorted input means any duplicate is among the trailing entries.
+    //
+    // Matching against the kept representative rather than chaining is
+    // deliberate: a string of reports each 70 m from the last would otherwise
+    // collapse kilometres of separate incidents into a single warning.
+    let duplicateAt = -1;
+    for (let i = kept.length - 1; i >= 0; i -= 1) {
+      if (alert.distanceAlongM - kept[i].distanceAlongM > DUPLICATE_WINDOW_M) break;
+      if (kept[i].kind === alert.kind) {
+        duplicateAt = i;
+        break;
+      }
+    }
+
+    if (duplicateAt < 0) {
+      kept.push(alert);
+      continue;
+    }
+
+    // Keep whichever source is more trustworthy; on a tie keep the first,
+    // which is the earlier one on the road.
+    if (SOURCE_RANK[alert.source] > SOURCE_RANK[kept[duplicateAt].source]) {
+      // Hold the cluster's original position. The better source can sit
+      // further along than the entry it replaces, and writing its distance
+      // into an earlier slot would leave the list unsorted for the caller —
+      // which picks the next alert by walking it in order. Warning at the
+      // first report of a cluster is also the safer end to err on.
+      kept[duplicateAt] = { ...alert, distanceAlongM: kept[duplicateAt].distanceAlongM };
+    }
+  }
+
+  return kept;
 }
 
 /** Closest vertex on the path, with its perpendicular-ish offset in metres. */

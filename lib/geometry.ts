@@ -168,6 +168,33 @@ export function boundsOf(coordinates: [number, number][]): [[number, number], [n
  * Thin a path down to points at least `spacingM` apart. Used to build the
  * Overpass "along the route" query without blowing past its URL length limit.
  */
+/**
+ * The next `maxKm` of a path, starting at `fromIndex`.
+ *
+ * Used to box the stretch of road that still matters. Boxing an entire
+ * cross-country route covers an enormous area, most of it behind the driver or
+ * hours away, which wastes a metered request and risks a capped response that
+ * drops the part actually being driven.
+ */
+export function pathAhead(path: [number, number][], fromIndex: number, maxKm: number): [number, number][] {
+  const start = Math.max(0, Math.min(fromIndex, path.length - 1));
+  const limitM = maxKm * 1000;
+
+  const slice: [number, number][] = [path[start]];
+  let travelled = 0;
+
+  for (let i = start + 1; i < path.length; i += 1) {
+    travelled += haversineMeters(
+      { lng: path[i - 1][0], lat: path[i - 1][1] },
+      { lng: path[i][0], lat: path[i][1] }
+    );
+    slice.push(path[i]);
+    if (travelled >= limitM) break;
+  }
+
+  return slice;
+}
+
 export function samplePath(path: [number, number][], spacingM: number): Coordinate[] {
   if (!path.length) return [];
   const out: Coordinate[] = [{ lng: path[0][0], lat: path[0][1] }];

@@ -34,7 +34,7 @@ import { SettingsPanel } from '@/components/SettingsPanel';
 import { SpeedPanel } from '@/components/SpeedPanel';
 import { MAP_STYLES, appEnv } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
-import { boundsOf, haversineMeters } from '@/lib/geometry';
+import { boundsOf, haversineMeters, pathAhead } from '@/lib/geometry';
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
 import { fetchSpeedCameras, positionAlertsOnRoute } from '@/lib/services/alerts';
 import { WazeThrottled, fetchWazeTraffic } from '@/lib/services/waze';
@@ -74,6 +74,11 @@ import { estimateTrafficDelay } from '@/lib/traffic';
 import { ChargePlanError, chargersToWaypoints, planChargingStops } from '@/lib/services/chargeplan';
 import { ElevationProfile, climbEnergyKwh, fetchElevationProfile } from '@/lib/services/elevation';
 import { StopWeather, aqiTone, fetchWeatherAt } from '@/lib/services/weather';
+import { DeparturePlanner } from '@/components/DeparturePlanner';
+import { DetourBanner } from '@/components/DetourBanner';
+import { RerouteSuggestion, findJamDetour, severeJams } from '@/lib/services/reroute';
+import { planDeparture } from '@/lib/departure';
+import { encodePlusCode } from '@/lib/pluscode';
 import { decodeTrip, encodeTrip, estimateRange } from '@/lib/trip';
 import { VoiceSettings, configureVoice, primeSpeech, speak, stopSpeaking } from '@/lib/voice';
 import { releaseWakeLock, requestWakeLock } from '@/lib/wakelock';
@@ -102,6 +107,18 @@ const REROUTE_THRESHOLD = 3;
 
 /** How many times to retry charger loading after an Overpass outage. */
 const MAX_CHARGER_RETRIES = 3;
+
+/**
+ * How far ahead live traffic is fetched for, in km.
+ *
+ * Far enough to give warning of a jam at motorway speed (40 km is over 20
+ * minutes at 110 km/h), short enough that the box stays a corridor rather than
+ * half a country.
+ */
+const TRAFFIC_LOOKAHEAD_KM = 40;
+
+/** Distance driven before the traffic box is moved up the route. */
+const TRAFFIC_REBOX_KM = 15;
 
 export function MapShell() {
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
@@ -140,6 +157,14 @@ export function MapShell() {
   const [jams, setJams] = useState<TrafficJam[]>([]);
   const [trafficThrottled, setTrafficThrottled] = useState(false);
   const [weather, setWeather] = useState<StopWeather | null>(null);
+  /** Target arrival "HH:MM" for departure planning; null means "leaving now". */
+  const [targetArrival, setTargetArrival] = useState<string | null>(null);
+  /** A faster way round the jams ahead, once one has been found. */
+  const [detour, setDetour] = useState<RerouteSuggestion | null>(null);
+  /** Jam set already evaluated, so one bad jam costs one routing request. */
+  const detourCheckedRef = useRef('');
+  /** Route vertex the traffic box currently starts from. */
+  const [trafficFromIndex, setTrafficFromIndex] = useState(0);
   const [elevation, setElevation] = useState<ElevationProfile | null>(null);
   const [planningCharge, setPlanningCharge] = useState(false);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => getVoiceSettings());
@@ -177,6 +202,9 @@ export function MapShell() {
   const announcedAlertsRef = useRef(new Set<string>());
 
   const destination = waypoints.length > 1 ? waypoints[waypoints.length - 1] : null;
+
+  /** Plus Code for the destination, computed locally — no lookup involved. */
+  const destinationPlusCode = destination ? encodePlusCode(destination.coordinate) : null;
 
   const showToast = useCallback((message: string) => {
     setToast(message);
@@ -400,6 +428,26 @@ export function MapShell() {
     return () => controller.abort();
   }, [route]);
 
+  /**
+   * Advance the traffic box as the drive progresses.
+   *
+   * Keyed off distance travelled rather than the raw shape index, so this
+   * fires roughly once per TRAFFIC_REBOX_KM instead of on every GPS fix —
+   * re-boxing per tick would refetch a metered endpoint continuously.
+   */
+  useEffect(() => {
+    if (!navActive || !progress || !navIndexRef.current) {
+      setTrafficFromIndex(0);
+      return;
+    }
+
+    const { cumulative } = navIndexRef.current;
+    const travelled = cumulative[progress.shapeIndex] ?? 0;
+    const boxedAt = cumulative[trafficFromIndex] ?? 0;
+
+    if (travelled - boxedAt >= TRAFFIC_REBOX_KM * 1000) setTrafficFromIndex(progress.shapeIndex);
+  }, [navActive, progress, trafficFromIndex]);
+
   /* --------------------------------------------------------- live traffic */
   useEffect(() => {
     if (!route || !hasLocalDataKey()) {
@@ -408,7 +456,12 @@ export function MapShell() {
       return;
     }
 
-    const box = boundsOf(route.coordinates);
+    // Box the stretch that still matters rather than the whole route: while
+    // driving, that is the road ahead. A cross-country bbox spends the same
+    // metered request on an area that is mostly nowhere near the car, and a
+    // capped response could drop the segment being driven.
+    const from = navActive ? trafficFromIndex : 0;
+    const box = boundsOf(pathAhead(route.coordinates, from, TRAFFIC_LOOKAHEAD_KM));
     if (!box) return;
     const bounds = {
       southWest: { lat: box[0][1], lng: box[0][0] },
@@ -420,6 +473,9 @@ export function MapShell() {
 
     setTrafficThrottled(false);
     const load = () => {
+      // Every call is metered, so don't spend one on a backgrounded tab.
+      if (document.visibilityState === 'hidden') return;
+
       fetchWazeTraffic(bounds, controller.signal)
         .then((traffic) => {
           setLiveAlerts(traffic.alerts);
@@ -437,11 +493,19 @@ export function MapShell() {
     // three minutes keeps it current without burning the user's quota.
     timer = setInterval(load, 180_000);
 
+    // Coming back to a foreground tab, the last data is up to three minutes
+    // old; refresh rather than waiting out the remainder of the interval.
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') load();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+
     return () => {
       controller.abort();
+      document.removeEventListener('visibilitychange', onVisible);
       if (timer) clearInterval(timer);
     };
-  }, [route]);
+  }, [route, navActive, trafficFromIndex]);
 
   /**
    * Everything worth warning about, placed along the route in order: OSM speed
@@ -796,6 +860,22 @@ export function MapShell() {
     }
   }
 
+  /**
+   * Copy the destination's Plus Code. Useful for somewhere with no street
+   * address — it can be read aloud over the phone and pasted straight back
+   * into the search field, which resolves it offline.
+   */
+  async function handleCopyPlusCode() {
+    if (!destinationPlusCode) return;
+
+    try {
+      await navigator.clipboard.writeText(destinationPlusCode);
+      showToast(`Copied ${destinationPlusCode}`);
+    } catch {
+      showToast('Could not copy — your browser blocked clipboard access.');
+    }
+  }
+
   function handleReport(kind: HazardKind) {
     const report: HazardReport = {
       id: `${Date.now()}-${kind}`,
@@ -956,9 +1036,65 @@ export function MapShell() {
 
   /** Delay from jams that genuinely sit on this route. */
   const trafficDelay = useMemo(
-    () => (route ? estimateTrafficDelay(jams, route.coordinates) : null),
-    [route, jams]
+    () => (route ? estimateTrafficDelay(jams, route.coordinates, speedLimits) : null),
+    [route, jams, speedLimits]
   );
+
+  /** Door-to-door time including traffic — what both the ETA and "leave by" use. */
+  const travelSeconds = (activeRouteSummary?.durationMin ?? 0) * 60 + (trafficDelay?.seconds ?? 0);
+
+  /* ------------------------------------------- routing around bad jams */
+  useEffect(() => {
+    if (!route || !trafficDelay?.onRoute.length || waypoints.length < 2) {
+      setDetour(null);
+      return;
+    }
+
+    const severe = severeJams(trafficDelay.onRoute);
+    if (!severe.length) {
+      setDetour(null);
+      return;
+    }
+
+    // Each detour costs a routing request, so evaluate a given set of jams
+    // once rather than on every traffic refresh.
+    const signature = severe
+      .map((entry) => entry.jam.id)
+      .sort()
+      .join('|');
+    if (detourCheckedRef.current === signature) return;
+    detourCheckedRef.current = signature;
+
+    const controller = new AbortController();
+
+    findJamDetour(
+      waypoints.map((point) => point.coordinate),
+      options,
+      { durationMin: route.summary.durationMin, delaySeconds: trafficDelay.seconds },
+      trafficDelay.onRoute,
+      jams,
+      speedLimits,
+      controller.signal
+    )
+      .then(setDetour)
+      .catch(() => setDetour(null));
+
+    return () => controller.abort();
+  }, [route, trafficDelay, jams, speedLimits, waypoints, options]);
+
+  /** Switch to the detour. The jam set stays marked so it won't re-prompt. */
+  function acceptDetour() {
+    if (!detour) return;
+
+    setRoute(detour.route);
+    navIndexRef.current = buildNavIndex(detour.route);
+    shapeHintRef.current = 0;
+    announcedRef.current.clear();
+    setActiveAlternativeId(null);
+    setFitRouteToken((token) => token + 1);
+    showToast(`Rerouted — saving ${Math.max(1, Math.round(detour.savedSeconds / 60))} min`);
+    setDetour(null);
+  }
 
   /* ----------------------------------------------- weather at destination */
   useEffect(() => {
@@ -969,16 +1105,23 @@ export function MapShell() {
 
     const controller = new AbortController();
     // Forecast for arrival, not departure — that is the whole point of asking.
-    const arrival = Date.now() + (route.summary.durationMin + (trafficDelay?.seconds ?? 0) / 60) * 60_000;
+    // With a departure plan set, that arrival is the planned one, which can be
+    // tomorrow morning; forecasting for "if I left now" would be misleading.
+    const plan = targetArrival ? planDeparture(targetArrival, travelSeconds) : null;
+    const arrival =
+      plan?.achievable
+        ? plan.arrivalMs
+        : Date.now() + (route.summary.durationMin + (trafficDelay?.seconds ?? 0) / 60) * 60_000;
 
     fetchWeatherAt(destination.coordinate, arrival, controller.signal)
       .then(setWeather)
       .catch(() => setWeather(null));
 
     return () => controller.abort();
-    // Re-fetching on every traffic tick would be wasteful; the route is enough.
+    // Re-fetching on every traffic tick would be wasteful; the route and the
+    // planned arrival are what actually change the answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, destination?.id]);
+  }, [route, destination?.id, targetArrival]);
 
   return (
     <main className="relative h-[100dvh] w-screen overflow-hidden bg-surface text-fg">
@@ -1020,9 +1163,20 @@ export function MapShell() {
           onToggleVoice={() => updatePreferences({ ...preferences, voiceGuidance: !preferences.voiceGuidance })}
           onStop={toggleNavigation}
           onCancel={clearRoute}
+          banner={
+            detour ? (
+              <DetourBanner suggestion={detour} onAccept={acceptDetour} onDismiss={() => setDetour(null)} />
+            ) : null
+          }
         />
       ) : (
         <>
+          {detour ? (
+            <div className="safe-x pointer-events-none absolute inset-x-0 top-[calc(env(safe-area-inset-top)+4rem)] z-30 flex justify-center">
+              <DetourBanner suggestion={detour} onAccept={acceptDetour} onDismiss={() => setDetour(null)} />
+            </div>
+          ) : null}
+
           <header className="safe-top safe-x pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 pb-3">
             <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 shadow-panel">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
@@ -1262,6 +1416,16 @@ export function MapShell() {
                 ) : activeRouteSummary && destination ? (
                   <>
                     <div className="truncate text-lg font-semibold text-fg">{destination.name}</div>
+                    {destinationPlusCode ? (
+                      <button
+                        type="button"
+                        onClick={() => void handleCopyPlusCode()}
+                        title="Copy Plus Code"
+                        className="mt-0.5 font-mono text-xs tracking-tight text-subtle transition hover:text-accent"
+                      >
+                        {destinationPlusCode}
+                      </button>
+                    ) : null}
                     <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
                       <span className="text-2xl font-semibold tabular-nums text-fg">
                         {formatDurationMin(activeRouteSummary.durationMin)}
@@ -1283,6 +1447,13 @@ export function MapShell() {
                         <Tag tone="slate">
                           {waypoints.length - 2} stop{waypoints.length > 3 ? 's' : ''}
                         </Tag>
+                      ) : null}
+                      {!targetArrival ? (
+                        <DeparturePlanner
+                          travelSeconds={travelSeconds}
+                          target={targetArrival}
+                          onChange={setTargetArrival}
+                        />
                       ) : null}
                     </div>
                   </>
@@ -1360,6 +1531,11 @@ export function MapShell() {
                 </div>
               ) : null}
             </div>
+
+            {/* Full sheet width — inside the info column it wrapped to two lines. */}
+            {targetArrival && activeRouteSummary && destination ? (
+              <DeparturePlanner travelSeconds={travelSeconds} target={targetArrival} onChange={setTargetArrival} />
+            ) : null}
 
             {route && route.alternatives.length ? (
               <div className="-mx-1 mt-3 flex gap-1.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">

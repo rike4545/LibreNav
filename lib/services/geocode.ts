@@ -1,4 +1,5 @@
 import { getEndpoints } from '@/lib/config';
+import { decodePlusCode, isFullPlusCode, isShortPlusCode, recoverPlusCode } from '@/lib/pluscode';
 import { Coordinate, SearchFeature } from '@/types/map';
 
 type PhotonProperties = {
@@ -69,6 +70,9 @@ export async function searchPlaces(
   const direct = parseCoordinateQuery(trimmed);
   if (direct) return [direct];
 
+  const plus = await resolvePlusCodeQuery(trimmed, options.near ?? null, options.signal);
+  if (plus) return [plus];
+
   const { photonUrl } = getEndpoints();
   const url = new URL('/api', photonUrl);
   url.searchParams.set('q', trimmed);
@@ -113,6 +117,66 @@ export async function reverseGeocode(point: Coordinate, signal?: AbortSignal): P
   const feature = toFeature(first, 0);
   // Keep the tapped point, not the centroid of whatever OSM object matched.
   return feature ? { ...feature, coordinate: point, id: `pin-${point.lat.toFixed(5)},${point.lng.toFixed(5)}` } : null;
+}
+
+/**
+ * Accept a pasted Plus Code, in any of the three forms people share.
+ *
+ *   87G8Q257+6R          full code, resolves on its own
+ *   Q257+6R              short code, resolved against where the user is
+ *   Q257+6R New York     short code with a locality, which is how they are
+ *                        printed on signage and pasted out of Google Maps
+ *
+ * The locality form needs a geocode first, so this is async — the other two
+ * resolve offline, which is the whole point of Plus Codes for rural addresses.
+ */
+async function resolvePlusCodeQuery(
+  query: string,
+  near: Coordinate | null,
+  signal?: AbortSignal
+): Promise<SearchFeature | null> {
+  const value = query.trim().toUpperCase();
+
+  if (isFullPlusCode(value)) {
+    const area = decodePlusCode(value);
+    return area ? plusCodeFeature(value, area.center) : null;
+  }
+
+  // Split the code token off whatever locality follows it.
+  const [token, ...rest] = value.split(/\s+/);
+  if (!isShortPlusCode(token)) return null;
+
+  const locality = rest.join(' ').trim();
+
+  if (!locality) {
+    if (!near) return null;
+    const area = recoverPlusCode(token, near);
+    return area ? plusCodeFeature(token, area.center) : null;
+  }
+
+  // Resolve the locality, then recover the short code near it. The locality is
+  // plain text, so this cannot recurse back into a Plus Code lookup.
+  //
+  // Deliberately unbiased by the user's position: the locality is the anchor
+  // the code came with, and the whole point of writing it down is that the
+  // place is somewhere else. Biasing by `near` resolved "CWC8+R9 Mountain
+  // View" to a Mountain View 21 miles from the driver instead of the one in
+  // California the code actually belongs to.
+  const matches = await searchPlaces(locality, { limit: 1, signal }).catch(() => []);
+  const anchor = matches[0]?.coordinate ?? near;
+  if (!anchor) return null;
+
+  const area = recoverPlusCode(token, anchor);
+  return area ? plusCodeFeature(`${token} ${locality}`, area.center) : null;
+}
+
+function plusCodeFeature(code: string, coordinate: Coordinate): SearchFeature {
+  return {
+    id: `plus-${coordinate.lat.toFixed(6)},${coordinate.lng.toFixed(6)}`,
+    name: code,
+    label: 'Plus Code',
+    coordinate
+  };
 }
 
 /** Accept pasted coordinates: "40.7128, -74.0060" or "40.7128 -74.006". */

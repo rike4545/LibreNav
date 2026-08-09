@@ -154,7 +154,13 @@ function buildCostingOptions(options: RouteOptions) {
 export async function fetchRoute(
   stops: Coordinate[],
   options: RouteOptions,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  /**
+   * Areas the route must not pass through, as Valhalla exclude_polygons:
+   * an array of rings, each a list of [lng, lat] pairs. Used to route around
+   * live jams.
+   */
+  excludePolygons?: number[][][]
 ): Promise<RouteResponse> {
   if (stops.length < 2) {
     throw new RoutingError('A route needs at least an origin and a destination.');
@@ -173,7 +179,8 @@ export async function fetchRoute(
     costing_options: buildCostingOptions(options),
     directions_options: { units: 'kilometers' },
     // Alternates only apply to two-point routes in Valhalla.
-    alternates: options.alternatives && stops.length === 2 ? 2 : 0
+    alternates: options.alternatives && stops.length === 2 ? 2 : 0,
+    ...(excludePolygons?.length ? { exclude_polygons: excludePolygons } : {})
   };
 
   let response: Response;

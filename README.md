@@ -35,6 +35,10 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Search a category along the whole route, not just in a circle around you
 - Saved places with home/work roles, plus recents
 - Paste coordinates directly, or long-press the map to drop a destination
+- Plus Codes (Open Location Code) in all three forms — full (`87G8Q257+6R`), short against your
+  position (`Q257+6R`), and short with a locality (`CWC8+R9 Mountain View`). Encoded and decoded
+  on device, so a rural destination with no street address resolves without a lookup
+- Every destination shows its Plus Code, tap to copy
 
 **EV**
 - Charger overlay clustered by zoom and coloured by peak power
@@ -48,12 +52,25 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Weather at your destination for the time you actually arrive, not the time you leave
 - Warnings for ice, snow, poor visibility, heavy rain, and strong wind
 - Air quality (US AQI) at arrival, banded and warned on when unhealthy
+- Departure planning — give it an arrival time and it works backward to "leave by", including
+  live traffic. A time that has already passed means tomorrow, and if the trip no longer fits it
+  says how late you would be rather than showing an impossible departure
+- Setting a target arrival moves the weather and AQI forecast to that hour too
 - Installable, and opens without a signal once cached
 
 **Live traffic (optional, your own key)**
 - Waze jams drawn along the road, coloured by congestion level
 - Jams on your route add a visible "+N min traffic" to the arrival time
+- Delays are measured against the posted speed limit where OSM has one, so a standstill on a
+  motorway is not scored as though the road were a 50 km/h street
+- **Routing around jams.** A stationary jam ahead is fenced off and the route recomputed; if the
+  way round is meaningfully faster you are offered it rather than switched onto it silently. The
+  detour is scored against the same live jams, so swapping one queue for another is rejected
 - Waze police, crash, closure, and hazard reports announced on approach like any other alert
+- One hazard warns once — a fixed camera in OSM, the live report of it, and your own pin collapse
+  into a single alert, keeping whichever source is most trustworthy
+- Traffic is fetched for the road ahead rather than a box around the whole route, and pauses while
+  the tab is in the background — the endpoint is metered and both waste it
 - Business search results — ratings, opening status, addresses — merged into search ahead of OSM
 - Your key is stored only in your browser; it is never committed or built into the app
 
@@ -109,7 +126,10 @@ Key modules:
 - `lib/geometry.ts` — haversine, bearings, polyline decoding, windowed path snapping
 - `lib/trip.ts` — share-link encoding and the EV range model
 - `components/NavMap.tsx` — MapLibre layers, clustering, markers, and camera
-- `lib/traffic.ts` — turning jam speeds into a route delay
+- `lib/traffic.ts` — turning jam speeds into a route delay, against posted limits where known
+- `lib/services/reroute.ts` — fencing a jam off and asking Valhalla for the way round
+- `lib/pluscode.ts` — Open Location Code, verified against the reference test vectors
+- `lib/departure.ts` — "leave by" clock arithmetic, including roll-over and DST
 - `lib/wakelock.ts` — keeping the screen on, reacquiring after the tab is hidden
 - `public/sw.js` — offline shell; deliberately never caches live data
 
@@ -166,8 +186,16 @@ Worth knowing before you rely on it:
 - **No live traffic by default.** ETAs come from Valhalla's speed model, not current conditions.
   Adding your own OpenWeb Ninja key turns on live Waze jams, and jams that lie on your route do
   adjust the arrival time — shown separately as "+N min traffic" rather than folded in silently.
-  The delay assumes a 50 km/h free-flow baseline, since Valhalla reports one duration for the whole
-  route rather than per segment, so treat it as an estimate.
+  The delay is measured against the posted limit where OSM has one and a 50 km/h baseline where it
+  does not, and Valhalla reports one duration for the whole route rather than per segment, so treat
+  it as an estimate.
+- **Jam rerouting is bounded by what the feed knows.** A detour is only offered for a jam the feed
+  reports on the road ahead, and the alternative is scored using those same jams — a queue on the
+  detour that nobody has reported yet is invisible to it. The fence drawn around a jam is a 20 m
+  ribbon, which in a dense street grid can also exclude a road running alongside; that costs a
+  slightly worse detour rather than a wrong one.
+- **Traffic is fetched for the road ahead**, currently the next 40 km, re-boxed every 15 km driven.
+  A jam beyond that window is not known about until you get closer.
 - **No live charger availability.** Charger details are OSM tags, which can be incomplete or stale.
 - **Charging stops are a suggestion, not a plan.** They assume charging to 80%, spread the climb
   cost evenly along the route rather than per segment, and pick chargers on OSM data that may be

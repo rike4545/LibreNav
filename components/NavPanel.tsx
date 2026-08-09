@@ -16,9 +16,14 @@ type Props = {
   onToggleVoice: () => void;
   onStop: () => void;
   onCancel: () => void;
+  /**
+   * Slotted below the stats so anything transient (a faster-route offer) joins
+   * the same vertical stack instead of being positioned over it by guesswork.
+   */
+  banner?: React.ReactNode;
 };
 
-export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rerouting, onToggleVoice, onStop, onCancel }: Props) {
+export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rerouting, onToggleVoice, onStop, onCancel, banner }: Props) {
   const step = progress ? route.maneuvers[progress.stepIndex] : route.maneuvers[0];
   const next = progress ? route.maneuvers[progress.stepIndex + 1] : route.maneuvers[1];
   if (!step) return null;
@@ -130,6 +135,8 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
           ) : null}
         </div>
       ) : null}
+
+      {banner}
     </div>
   );
 }
