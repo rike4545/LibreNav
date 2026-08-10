@@ -34,7 +34,7 @@ import { SettingsPanel } from '@/components/SettingsPanel';
 import { SpeedPanel } from '@/components/SpeedPanel';
 import { MAP_STYLES, appEnv } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
-import { boundsOf, haversineMeters, pathAhead } from '@/lib/geometry';
+import { boundsOf, boxAround, haversineMeters, pathAhead } from '@/lib/geometry';
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
 import { fetchSpeedCameras, positionAlertsOnRoute } from '@/lib/services/alerts';
 import { WazeThrottled, fetchWazeTraffic } from '@/lib/services/waze';
@@ -120,6 +120,18 @@ const TRAFFIC_LOOKAHEAD_KM = 40;
 /** Distance driven before the traffic box is moved up the route. */
 const TRAFFIC_REBOX_KM = 15;
 
+/**
+ * Radius of the traffic box when there is no destination set.
+ *
+ * Free-driving has no corridor to look down, so this is a circle around the
+ * driver instead. Matches the charger search radius, which is the area the
+ * driver is already being shown.
+ */
+const FREE_DRIVE_RADIUS_KM = 12;
+
+/** How far the driver moves before that box is re-centred. */
+const FREE_DRIVE_REANCHOR_KM = 5;
+
 export function MapShell() {
   const [waypoints, setWaypoints] = useState<Waypoint[]>([]);
   const [route, setRoute] = useState<RouteResponse | null>(null);
@@ -165,6 +177,8 @@ export function MapShell() {
   const detourCheckedRef = useRef('');
   /** Route vertex the traffic box currently starts from. */
   const [trafficFromIndex, setTrafficFromIndex] = useState(0);
+  /** Centre of the traffic box while free-driving; null whenever a route is set. */
+  const [freeTrafficAnchor, setFreeTrafficAnchor] = useState<Coordinate | null>(null);
   const [elevation, setElevation] = useState<ElevationProfile | null>(null);
   const [planningCharge, setPlanningCharge] = useState(false);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings>(() => getVoiceSettings());
@@ -448,26 +462,60 @@ export function MapShell() {
     if (travelled - boxedAt >= TRAFFIC_REBOX_KM * 1000) setTrafficFromIndex(progress.shapeIndex);
   }, [navActive, progress, trafficFromIndex]);
 
+  /**
+   * Re-centre the free-drive traffic box only once the driver has actually
+   * left it. Returning the same reference below the threshold keeps the bounds
+   * memo stable, so a GPS tick does not trigger a metered request.
+   */
+  useEffect(() => {
+    // Deliberately tied to a real fix rather than the map centre. Falling back
+    // to the centre would fire a metered request on app open for a default
+    // location nobody is driving through, and again on every pan.
+    if (route || !userPosition) {
+      setFreeTrafficAnchor(null);
+      return;
+    }
+
+    const here = userPosition.coordinate;
+    setFreeTrafficAnchor((current) =>
+      current && haversineMeters(current, here) < FREE_DRIVE_REANCHOR_KM * 1000 ? current : here
+    );
+  }, [route, userPosition]);
+
+  /**
+   * Where to ask for live traffic.
+   *
+   * With a route, the stretch that still matters — while driving, the road
+   * ahead. A cross-country bbox spends the same metered request on an area
+   * mostly nowhere near the car, and a capped response could drop the segment
+   * being driven.
+   *
+   * Without a route, a box around the driver. Free-driving with no destination
+   * is an ordinary way to use a nav app, and it used to show no hazards at all.
+   */
+  const trafficBounds = useMemo(() => {
+    const box = route
+      ? boundsOf(pathAhead(route.coordinates, navActive ? trafficFromIndex : 0, TRAFFIC_LOOKAHEAD_KM))
+      : freeTrafficAnchor
+        ? boxAround(freeTrafficAnchor, FREE_DRIVE_RADIUS_KM)
+        : null;
+
+    if (!box) return null;
+    return {
+      southWest: { lat: box[0][1], lng: box[0][0] },
+      northEast: { lat: box[1][1], lng: box[1][0] }
+    };
+  }, [route, navActive, trafficFromIndex, freeTrafficAnchor]);
+
   /* --------------------------------------------------------- live traffic */
   useEffect(() => {
-    if (!route || !hasLocalDataKey()) {
+    if (!trafficBounds || !hasLocalDataKey()) {
       setLiveAlerts([]);
       setJams([]);
       return;
     }
 
-    // Box the stretch that still matters rather than the whole route: while
-    // driving, that is the road ahead. A cross-country bbox spends the same
-    // metered request on an area that is mostly nowhere near the car, and a
-    // capped response could drop the segment being driven.
-    const from = navActive ? trafficFromIndex : 0;
-    const box = boundsOf(pathAhead(route.coordinates, from, TRAFFIC_LOOKAHEAD_KM));
-    if (!box) return;
-    const bounds = {
-      southWest: { lat: box[0][1], lng: box[0][0] },
-      northEast: { lat: box[1][1], lng: box[1][0] }
-    };
-
+    const bounds = trafficBounds;
     const controller = new AbortController();
     let timer: ReturnType<typeof setInterval> | undefined;
 
@@ -505,14 +553,13 @@ export function MapShell() {
       document.removeEventListener('visibilitychange', onVisible);
       if (timer) clearInterval(timer);
     };
-  }, [route, navActive, trafficFromIndex]);
+  }, [trafficBounds]);
 
   /**
    * Everything worth warning about, placed along the route in order: OSM speed
    * cameras, live Waze reports, and the driver's own.
    */
   const routeAlerts = useMemo(() => {
-    if (!route || !navIndexRef.current) return [];
     const local: RoadAlert[] = reports.map((report) => ({
       id: report.id,
       kind: report.kind === 'camera' ? 'speed-camera' : report.kind,
@@ -520,12 +567,24 @@ export function MapShell() {
       note: report.note,
       source: 'local'
     }));
-    return positionAlertsOnRoute(
-      [...cameras, ...liveAlerts, ...local],
-      route.coordinates,
-      navIndexRef.current.cumulative
-    );
+    const all = [...cameras, ...liveAlerts, ...local];
+
+    // No route means nothing to measure "along" — but they still belong on the
+    // map. Only the on-approach warning needs a position, and that runs solely
+    // during guidance, which implies a route.
+    if (!route || !navIndexRef.current) return all;
+
+    return positionAlertsOnRoute(all, route.coordinates, navIndexRef.current.cumulative);
   }, [route, cameras, liveAlerts, reports, speedLimits]);
+
+  /**
+   * Same alerts, minus the driver's own.
+   *
+   * The map draws local reports from their own source, so feeding them to the
+   * alerts source as well stacks two near-identical circles on one point. The
+   * full list above still drives the spoken warning, which does want them.
+   */
+  const mapAlerts = useMemo(() => routeAlerts.filter((alert) => alert.source !== 'local'), [routeAlerts]);
 
   /** Posted limit where the driver currently is. */
   const currentLimitKmh = useMemo(() => {
@@ -1134,7 +1193,7 @@ export function MapShell() {
         chargers={visibleChargers}
         places={places}
         reports={reports}
-        alerts={routeAlerts}
+        alerts={mapAlerts}
         jams={jams}
         terrain3d={preferences.terrain3d}
         userPosition={userPosition}

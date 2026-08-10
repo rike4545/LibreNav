@@ -71,6 +71,9 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
   into a single alert, keeping whichever source is most trustworthy
 - Traffic is fetched for the road ahead rather than a box around the whole route, and pauses while
   the tab is in the background — the endpoint is metered and both waste it
+- With no destination set, traffic follows the driver instead: a 12 km box re-centred every 5 km,
+  so free-driving still shows hazards. It needs a real GPS fix, so it never spends a request on a
+  default location nobody is driving through
 - Business search results — ratings, opening status, addresses — merged into search ahead of OSM
 - Your key is stored only in your browser; it is never committed or built into the app
 
@@ -194,8 +197,12 @@ Worth knowing before you rely on it:
   detour that nobody has reported yet is invisible to it. The fence drawn around a jam is a 20 m
   ribbon, which in a dense street grid can also exclude a road running alongside; that costs a
   slightly worse detour rather than a wrong one.
-- **Traffic is fetched for the road ahead**, currently the next 40 km, re-boxed every 15 km driven.
-  A jam beyond that window is not known about until you get closer.
+- **Traffic is fetched for the road ahead**, currently the next 40 km, re-boxed every 15 km driven,
+  or a 12 km box around you when no destination is set. A jam beyond that window is not known about
+  until you get closer.
+- **Speed cameras still need a destination.** They are queried along a route, so free-driving shows
+  live Waze reports but not the OSM camera set — that would need its own viewport query against
+  Overpass, which is already the flakiest service here.
 - **No live charger availability.** Charger details are OSM tags, which can be incomplete or stale.
 - **Charging stops are a suggestion, not a plan.** They assume charging to 80%, spread the climb
   cost evenly along the route rather than per segment, and pick chargers on OSM data that may be

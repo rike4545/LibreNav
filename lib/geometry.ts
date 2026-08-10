@@ -169,6 +169,25 @@ export function boundsOf(coordinates: [number, number][]): [[number, number], [n
  * Overpass "along the route" query without blowing past its URL length limit.
  */
 /**
+ * A bounding box of roughly `radiusKm` around a point.
+ *
+ * Longitude degrees shrink toward the poles, so the lng span is divided by
+ * cos(lat) — without that the box is far too narrow in Scandinavia and too
+ * wide near the equator.
+ */
+export function boxAround(center: Coordinate, radiusKm: number): [[number, number], [number, number]] {
+  const latSpan = radiusKm / 110.54;
+  // Guard the pole, where cos(lat) approaches zero and the span explodes.
+  const cosLat = Math.max(0.01, Math.cos((center.lat * Math.PI) / 180));
+  const lngSpan = radiusKm / (111.32 * cosLat);
+
+  return [
+    [center.lng - lngSpan, Math.max(-90, center.lat - latSpan)],
+    [center.lng + lngSpan, Math.min(90, center.lat + latSpan)]
+  ];
+}
+
+/**
  * The next `maxKm` of a path, starting at `fromIndex`.
  *
  * Used to box the stretch of road that still matters. Boxing an entire
