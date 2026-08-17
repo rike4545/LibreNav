@@ -163,6 +163,22 @@ export const discountSections: DiscountSection[] = [
     ]
   },
   {
+    id: 'privacy',
+    title: 'Roads & privacy',
+    description: 'What gets recorded about a vehicle on the road, and who looked it up.',
+    footnote: 'Coverage depends on which agencies release their logs, so a clean result is not proof of nothing.',
+    items: [
+      {
+        title: 'Have I Been Flocked?',
+        href: 'https://haveibeenflocked.com/',
+        description:
+          'Check a plate against Flock ALPR audit logs obtained by records request, and map camera density by county.',
+        deal: 'Free',
+        kind: 'resource'
+      }
+    ]
+  },
+  {
     id: 'cashback',
     title: 'Cash back & rewards',
     description: 'Apps that pay a little back on fuel, groceries, and everyday orders.',

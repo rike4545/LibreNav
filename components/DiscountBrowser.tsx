@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BatteryCharging, Car, Landmark, Map, Search, ShoppingBag, Wallet, X } from 'lucide-react';
+import { BatteryCharging, Car, Landmark, Map, ScanEye, Search, ShoppingBag, Wallet, X } from 'lucide-react';
 import type { DiscountLink, DiscountLinkKind, DiscountSection } from '@/lib/discounts';
 import { cn } from '@/lib/utils';
 
@@ -20,6 +20,7 @@ const SECTION_ICON: Record<string, typeof Car> = {
   'charging-programs': BatteryCharging,
   'planning-tools': Map,
   incentives: Landmark,
+  privacy: ScanEye,
   cashback: Wallet,
   everyday: ShoppingBag
 };
