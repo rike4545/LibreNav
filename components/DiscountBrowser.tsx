@@ -9,10 +9,10 @@ type Props = { sections: DiscountSection[] };
 
 /** Pill colours by link kind. Referral stays visually distinct on purpose. */
 const DEAL_TONE: Record<DiscountLinkKind, string> = {
-  referral: 'border-emerald-400/40 bg-emerald-400/15 text-emerald-100',
-  membership: 'border-sky-400/40 bg-sky-400/15 text-sky-100',
-  resource: 'border-slate-400/30 bg-slate-400/10 text-slate-100',
-  partner: 'border-amber-400/40 bg-amber-400/15 text-amber-100'
+  referral: 'border-emerald-500/40 bg-emerald-400/15 text-emerald-800 dark:text-emerald-100',
+  membership: 'border-sky-500/40 bg-sky-400/15 text-sky-800 dark:text-sky-100',
+  resource: 'border-slate-500/30 bg-slate-400/10 text-slate-700 dark:text-slate-100',
+  partner: 'border-amber-500/40 bg-amber-400/15 text-amber-800 dark:text-amber-100'
 };
 
 const SECTION_ICON: Record<string, typeof Car> = {
@@ -76,7 +76,7 @@ function DiscountCard({ item }: { item: DiscountLink }) {
 
       <div className="mt-auto flex items-center justify-between gap-3 pt-3 text-xs text-subtle">
         <span className="truncate group-hover:text-muted">{hostOf(item.href)}</span>
-        {referral ? <span className="shrink-0 text-emerald-300/80">Referral link</span> : null}
+        {referral ? <span className="shrink-0 text-emerald-700 dark:text-emerald-300/80">Referral link</span> : null}
       </div>
     </a>
   );
@@ -187,7 +187,7 @@ export function DiscountBrowser({ sections }: Props) {
             return (
               <section key={section.id} id={section.id} className="scroll-mt-6">
                 <div className="flex items-baseline gap-2.5">
-                  {Icon ? <Icon className="h-5 w-5 shrink-0 translate-y-0.5 text-sky-300" aria-hidden /> : null}
+                  {Icon ? <Icon className="h-5 w-5 shrink-0 translate-y-0.5 text-sky-700 dark:text-sky-300" aria-hidden /> : null}
                   <h2 className="text-xl font-semibold tracking-tight text-fg">{section.title}</h2>
                   <span className="text-sm text-subtle">{section.items.length}</span>
                 </div>

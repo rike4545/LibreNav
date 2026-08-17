@@ -8,6 +8,12 @@ import type { Config } from 'tailwindcss';
 const withAlpha = (variable: string) => `rgb(var(${variable}) / <alpha-value>)`;
 
 const config: Config = {
+  /**
+   * `dark:` keys off our own attribute, not prefers-color-scheme. The theme is
+   * a stored preference that can override the OS, so the media strategy would
+   * light up dark variants for someone who explicitly chose light.
+   */
+  darkMode: ['selector', ':root[data-theme="dark"] &'],
   content: [
     './app/**/*.{js,ts,jsx,tsx,mdx}',
     './components/**/*.{js,ts,jsx,tsx,mdx}',

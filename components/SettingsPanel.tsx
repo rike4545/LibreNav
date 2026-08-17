@@ -67,8 +67,11 @@ export function SettingsPanel({
     setTimeout(() => setSaved(false), 2200);
   }
 
+  // The 2rem subtracted below is the safe-pad the overlay puts around this
+  // panel; without it the panel sizes to the whole safe area and loses its
+  // header and its last row off the ends of a landscape screen.
   return (
-    <div className="flex max-h-[min(85vh,44rem)] w-[min(30rem,calc(100vw-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-panel">
+    <div className="flex max-h-[min(44rem,calc(var(--safe-h)-2rem))] w-[min(30rem,calc(var(--safe-w)-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-panel">
       <header className="flex items-center justify-between border-b border-line px-5 py-4">
         <h2 className="text-lg font-semibold text-fg">Settings</h2>
         <button type="button" onClick={onClose} aria-label="Close settings" className="rounded-full p-1.5 text-subtle hover:bg-strong hover:text-fg">

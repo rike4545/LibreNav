@@ -11,7 +11,7 @@ export const metadata: Metadata = {
 
 export default function DiscountsPage() {
   return (
-    <main className="min-h-screen bg-[radial-gradient(circle_at_top,#0f172a_0%,#020617_55%,#01040b_100%)] px-4 py-6 text-fg">
+    <main className="page-backdrop min-h-screen px-4 py-6 text-fg">
       <div className="mx-auto max-w-6xl">
         <div className="rounded-[2rem] border border-line bg-surface p-5 shadow-panel sm:p-8">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -46,7 +46,7 @@ export default function DiscountsPage() {
             answers the question a reader has anyway — why is this list here.
           */}
           <div className="mt-6 flex max-w-3xl items-start gap-3 rounded-2xl border border-line bg-raised p-4">
-            <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-300" aria-hidden />
+            <Info className="mt-0.5 h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" aria-hidden />
             <p className="text-sm leading-6 text-muted">
               <span className="font-semibold text-fg">{discountSummary.referralCount} are referral links</span>, marked as
               such on the card. Using one supports LibreNav at no extra cost to you. The rest are plain links to networks
@@ -65,7 +65,7 @@ export default function DiscountsPage() {
               href="https://github.com/rike4545/LibreNav/issues"
               target="_blank"
               rel="noreferrer noopener"
-              className="font-medium text-sky-300 underline underline-offset-4 hover:text-sky-200"
+              className="font-medium text-sky-700 underline underline-offset-4 hover:text-sky-900 dark:text-sky-300 dark:hover:text-sky-200"
             >
               Open an issue
             </a>

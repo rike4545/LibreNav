@@ -20,7 +20,7 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
   const tier = power === null ? 'unknown' : power >= 150 ? 'ultra' : power >= 50 ? 'fast' : 'slow';
 
   return (
-    <div className="w-[min(24rem,calc(100vw-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
+    <div className="w-[min(24rem,calc(var(--safe-w)-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">

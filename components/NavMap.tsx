@@ -115,6 +115,10 @@ export function NavMap({
   const userMarkerRef = useRef<Marker | null>(null);
   const waypointMarkersRef = useRef<Marker[]>([]);
   const styleReadyRef = useRef(false);
+  /** Style the map is actually on, so a swap can't be requested twice or lost. */
+  const appliedStyleRef = useRef<string | null>(null);
+  /** Latest requested style, readable from the mount effect's closure. */
+  const styleIdRef = useRef(styleId);
 
   // Handlers land in map event callbacks that are registered once; refs keep
   // those callbacks pointing at the current props without re-binding listeners.
@@ -430,6 +434,7 @@ export function NavMap({
       maxPitch: 70
     });
     mapRef.current = map;
+    appliedStyleRef.current = styleId;
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
@@ -453,6 +458,17 @@ export function NavMap({
     const applyOverlays = () => {
       if (!styleParsed()) return false;
       styleReadyRef.current = true;
+
+      // A style change asked for before this point was refused below. Honour it
+      // now rather than dropping it — that is how a theme flip during the first
+      // load used to strand a dark basemap under a light UI. Recording it as
+      // applied first is what stops the resulting styledata re-entering here.
+      if (appliedStyleRef.current !== styleIdRef.current) {
+        appliedStyleRef.current = styleIdRef.current;
+        map.setStyle(resolveMapStyleUrl(styleIdRef.current), { diff: false });
+        return true;
+      }
+
       installLayers(map);
       raiseOverlays(map);
       syncOverlayData(map);
@@ -522,8 +538,13 @@ export function NavMap({
 
   /* --------------------------------------------------------- style swap */
   useEffect(() => {
+    styleIdRef.current = styleId;
     const map = mapRef.current;
+    // Before the first style parses, setStyle would be discarded; applyOverlays
+    // picks the change back up off styleIdRef once it is safe.
     if (!map || !styleReadyRef.current) return;
+    if (appliedStyleRef.current === styleId) return;
+    appliedStyleRef.current = styleId;
     map.setStyle(resolveMapStyleUrl(styleId), { diff: false });
   }, [styleId]);
 

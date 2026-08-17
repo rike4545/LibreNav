@@ -32,7 +32,8 @@ import { ReportSheet } from '@/components/ReportSheet';
 import { SearchPanel } from '@/components/SearchPanel';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { SpeedPanel } from '@/components/SpeedPanel';
-import { MAP_STYLES, appEnv } from '@/lib/config';
+import { useResolvedTheme } from '@/components/ThemeSync';
+import { MAP_STYLES, appEnv, autoMapStyleId } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
 import { boundsOf, boxAround, haversineMeters, pathAhead } from '@/lib/geometry';
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
@@ -149,6 +150,11 @@ export function MapShell() {
   const [rerouting, setRerouting] = useState(false);
 
   const [preferences, setPreferences] = useState<Preferences>(() => getPreferences());
+  const resolvedTheme = useResolvedTheme();
+  // 'auto' is a UI-level id with no tiles behind it; NavMap only ever sees a
+  // real basemap, which also means a theme flip reloads the style for free.
+  const mapStyleId =
+    preferences.mapStyleId === 'auto' ? autoMapStyleId(resolvedTheme) : preferences.mapStyleId;
   const [vehicle, setVehicle] = useState<VehicleProfile>(() => getVehicle());
   const [options, setOptions] = useState<RouteOptions>(() => getRouteOptions());
   const [saved, setSaved] = useState<SavedPlace[]>([]);
@@ -1183,10 +1189,10 @@ export function MapShell() {
   }, [route, destination?.id, targetArrival]);
 
   return (
-    <main className="relative h-[100dvh] w-screen overflow-hidden bg-surface text-fg">
+    <main className="relative h-[100dvh] w-full overflow-hidden bg-surface text-fg">
       <NavMap
         center={mapCenter}
-        styleId={preferences.mapStyleId}
+        styleId={mapStyleId}
         waypoints={waypoints}
         route={route}
         activeAlternativeId={activeAlternativeId}
@@ -1237,36 +1243,44 @@ export function MapShell() {
           ) : null}
 
           <header className="safe-top safe-x pointer-events-none absolute inset-x-0 top-0 z-20 flex items-start justify-between gap-2 pb-3">
-            <div className="pointer-events-auto flex items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 shadow-panel">
-              <span className="h-2 w-2 rounded-full bg-emerald-400" />
+            {/*
+              `min-w-0` plus truncation on the status text is what keeps this
+              pill from stealing width from the buttons. Both are flex children
+              of a `justify-between` row, and every extra chip that can appear
+              here — REC, traffic, chargers — grows the pill; on a 320px phone
+              it squeezed the button cluster until the round buttons went oval.
+              The buttons are fixed-size targets, so the text yields instead.
+            */}
+            <div className="pointer-events-auto flex min-w-0 items-center gap-2 rounded-full border border-line bg-surface px-4 py-2 shadow-panel">
+              <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
               <span className="hidden text-sm font-semibold sm:inline">{appEnv.appName}</span>
               {geoDenied ? <span className="hidden text-xs text-amber-400 sm:inline">GPS off</span> : null}
               {recording ? (
-                <span className="flex items-center gap-1.5 text-xs text-rose-300">
+                <span className="flex shrink-0 items-center gap-1.5 text-xs text-rose-300">
                   <span className="h-2 w-2 animate-pulse rounded-full bg-rose-400" />
                   {track.length ? formatDistanceKm(trackDistanceKm(track), preferences.imperial) : 'REC'}
                 </span>
               ) : null}
               {trafficThrottled ? (
-                <span className="text-xs text-amber-300" title="Live traffic quota reached; pausing requests.">
+                <span className="truncate text-xs text-amber-300" title="Live traffic quota reached; pausing requests.">
                   Traffic paused
                 </span>
               ) : null}
               {chargerError && preferences.showChargers ? (
-                <span className="text-xs text-amber-300" title="Every Overpass mirror failed to respond.">
+                <span className="truncate text-xs text-amber-300" title="Every Overpass mirror failed to respond.">
                   Chargers unavailable
                 </span>
               ) : null}
             </div>
 
-            <div className="pointer-events-auto flex min-w-0 flex-nowrap items-center justify-end gap-1.5">
+            <div className="pointer-events-auto flex shrink-0 flex-nowrap items-center justify-end gap-1.5">
               <a
                 href="https://buymeacoffee.com/myevcompanionapp"
                 target="_blank"
                 rel="noreferrer noopener"
                 aria-label="Support this project"
                 title="Support this project"
-                className="rounded-full border border-amber-400/40 bg-amber-500/15 p-2.5 text-amber-200 shadow-panel backdrop-blur transition hover:bg-amber-500/25"
+                className="rounded-full border border-amber-400/40 bg-amber-500/15 p-2.5 text-amber-800 shadow-panel dark:text-amber-200 backdrop-blur transition hover:bg-amber-500/25"
               >
                 <Coffee className="h-4 w-4" />
               </a>
@@ -1285,7 +1299,7 @@ export function MapShell() {
                 className={cn(
                   'rounded-full border p-2 shadow-panel transition sm:p-2.5',
                   recording
-                    ? 'border-rose-400/60 bg-rose-500/25 text-rose-200 hover:bg-rose-500/35'
+                    ? 'border-rose-400/60 bg-rose-500/25 text-rose-700 hover:bg-rose-500/35 dark:text-rose-200'
                     : 'border-line bg-surface/95 text-muted hover:bg-strong'
                 )}
               >
@@ -1351,13 +1365,13 @@ export function MapShell() {
       ) : null}
 
       {reportOpen ? (
-        <div className="absolute bottom-4 left-1/2 z-50 -translate-x-1/2">
+        <div className="absolute bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 z-50 -translate-x-1/2">
           <ReportSheet onReport={handleReport} onClose={() => setReportOpen(false)} />
         </div>
       ) : null}
 
       {selectedCharger ? (
-        <div className="absolute bottom-4 left-1/2 z-40 -translate-x-1/2 lg:left-auto lg:right-4 lg:translate-x-0">
+        <div className="absolute bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 z-40 -translate-x-1/2 lg:left-auto lg:right-[max(1rem,env(safe-area-inset-right))] lg:translate-x-0">
           <ChargerCard
             charger={selectedCharger}
             from={userPosition?.coordinate ?? mapCenter}
@@ -1385,7 +1399,7 @@ export function MapShell() {
       ) : null}
 
       {settingsOpen ? (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-surface/95 p-4 backdrop-blur-sm">
+        <div className="safe-pad absolute inset-0 z-50 flex items-center justify-center bg-surface/95 backdrop-blur-sm">
           <SettingsPanel
             preferences={preferences}
             vehicle={vehicle}
@@ -1468,7 +1482,7 @@ export function MapShell() {
                     <span className="text-sm">Finding the best route…</span>
                   </div>
                 ) : routeError ? (
-                  <div className="flex items-start gap-2 text-rose-200">
+                  <div className="flex items-start gap-2 text-rose-700 dark:text-rose-200">
                     <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
                     <span className="text-sm">{routeError}</span>
                   </div>
@@ -1622,7 +1636,7 @@ export function MapShell() {
                   <div className="mt-2 space-y-1.5">
                     {route.maneuvers.slice(0, 3).map((maneuver, index) => (
                       <div key={`${maneuver.shapeIndex}-${index}`} className="flex items-center gap-2.5">
-                        <ManeuverIcon kind={maneuver.kind} className="h-4 w-4 shrink-0 text-sky-300" />
+                        <ManeuverIcon kind={maneuver.kind} className="h-4 w-4 shrink-0 text-sky-700 dark:text-sky-300" />
                         <span className="min-w-0 flex-1 truncate text-sm text-muted">{maneuver.instruction}</span>
                         <span className="shrink-0 text-xs tabular-nums text-subtle">
                           {formatDistanceM(maneuver.distanceKm * 1000, preferences.imperial)}
@@ -1766,8 +1780,8 @@ function AlternateChip({ active, onClick, children }: { active: boolean; onClick
 
 function Tag({ tone, children }: { tone: 'amber' | 'sky' | 'slate'; children: React.ReactNode }) {
   const tones = {
-    amber: 'bg-amber-500/20 text-amber-200',
-    sky: 'bg-sky-500/20 text-sky-200',
+    amber: 'bg-amber-500/20 text-amber-800 dark:text-amber-200',
+    sky: 'bg-sky-500/20 text-sky-800 dark:text-sky-200',
     slate: 'bg-strong text-muted'
   };
   return <span className={cn('rounded-full px-2.5 py-0.5 text-xs font-semibold', tones[tone])}>{children}</span>;

@@ -19,7 +19,7 @@ const KINDS: Array<{ kind: HazardKind; label: string; icon: typeof Camera; tone:
 
 export function ReportSheet({ onReport, onClose }: Props) {
   return (
-    <div className="w-[min(24rem,calc(100vw-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
+    <div className="w-[min(24rem,calc(var(--safe-w)-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold text-fg">Report at your location</h2>
         <button

@@ -6,7 +6,15 @@ const RECENTS_KEY = 'librenav.recents';
 const FAVORITES_KEY = 'librenav.favorites';
 const REPORTS_KEY = 'librenav.reports';
 const OPTIONS_KEY = 'librenav.options';
-const PREFS_KEY = 'librenav.prefs';
+/** Exported because the pre-paint theme script in the layout has to read it. */
+export const PREFS_KEY = 'librenav.prefs';
+
+/**
+ * Same-tab counterpart to the `storage` event, which only fires in *other*
+ * tabs. The theme sync in the root layout listens on this so a theme change
+ * made in Settings lands immediately instead of on the next navigation.
+ */
+export const PREFS_CHANGED_EVENT = 'librenav:preferences';
 const VEHICLE_KEY = 'librenav.vehicle';
 const VOICE_KEY = 'librenav.voice';
 const TRIPS_KEY = 'librenav.trips';
@@ -54,7 +62,8 @@ export const defaultPreferences: Preferences = {
   // Follow the locale's convention rather than assuming metric.
   imperial: typeof navigator !== 'undefined' && /^en-(US|GB|MM|LR)/i.test(navigator.language ?? ''),
   voiceGuidance: true,
-  mapStyleId: 'liberty',
+  // New installs follow the theme; anyone with a stored choice keeps it.
+  mapStyleId: 'auto',
   showChargers: true,
   minChargerKw: 0,
   chargerConnector: null,
@@ -161,6 +170,9 @@ export function getPreferences(): Preferences {
 
 export function savePreferences(preferences: Preferences): Preferences {
   safeWrite(PREFS_KEY, preferences);
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: preferences }));
+  }
   return preferences;
 }
 

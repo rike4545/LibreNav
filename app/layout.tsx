@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { ServiceWorkerRegistrar } from '@/components/ServiceWorkerRegistrar';
+import { ThemeSync } from '@/components/ThemeSync';
+import { PAGE_COLOR, THEME_BOOTSTRAP } from '@/lib/theme';
 
 // Static export can't resolve basePath at request time, so bake it in.
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH ?? '';
@@ -28,7 +30,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: '#020617',
+  // Two entries so the tag exists for both schemes before any script runs;
+  // THEME_BOOTSTRAP then pins it to the resolved choice.
+  themeColor: [
+    { media: '(prefers-color-scheme: light)', color: PAGE_COLOR.light },
+    { media: '(prefers-color-scheme: dark)', color: PAGE_COLOR.dark }
+  ],
   width: 'device-width',
   initialScale: 1,
   // Pinch-zoom is the map's job; page zoom just fights the fixed layout.
@@ -39,8 +46,12 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    // The bootstrap script sets data-theme before React sees the DOM, which is
+    // exactly the mismatch suppressHydrationWarning is for.
+    <html lang="en" suppressHydrationWarning>
       <body>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+        <ThemeSync />
         <ServiceWorkerRegistrar />
         {children}
       </body>

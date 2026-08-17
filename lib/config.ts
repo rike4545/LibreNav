@@ -25,12 +25,17 @@ export type MapStyleOption = {
  * free for reasonable use. All three send Access-Control-Allow-Origin: *.
  */
 export const MAP_STYLES: MapStyleOption[] = [
+  // Resolved against the UI theme before it reaches NavMap; see AUTO_MAP_STYLE.
+  { id: 'auto', label: 'Match theme', url: '', dark: false },
   { id: 'liberty', label: 'Streets', url: 'https://tiles.openfreemap.org/styles/liberty', dark: false },
   { id: 'dark', label: 'Dark', url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json', dark: true },
   { id: 'positron', label: 'Minimal', url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json', dark: false },
   { id: 'voyager', label: 'Voyager', url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json', dark: false },
   { id: 'bright', label: 'Bright', url: 'https://tiles.openfreemap.org/styles/bright', dark: false }
 ];
+
+/** 'auto' heads the list but carries no URL, so it can't be the fallback. */
+const FALLBACK_MAP_STYLE = MAP_STYLES.find((style) => style.id === 'liberty') ?? MAP_STYLES[1];
 
 /**
  * Terrarium-encoded elevation tiles from the AWS Open Data registry
@@ -144,7 +149,15 @@ export function resolveMapStyleUrl(styleId: string): string {
   if (mapStyleUrl && !MAP_STYLES.some((style) => style.url === mapStyleUrl)) {
     return mapStyleUrl;
   }
-  return MAP_STYLES.find((style) => style.id === styleId)?.url ?? MAP_STYLES[0].url;
+  const match = MAP_STYLES.find((style) => style.id === styleId);
+  // 'auto' carries no URL of its own — callers are expected to have swapped it
+  // for a concrete id already. Falling through to Streets beats a blank map.
+  return match?.url || FALLBACK_MAP_STYLE.url;
+}
+
+/** Which concrete basemap 'auto' means at a given UI theme. */
+export function autoMapStyleId(theme: 'dark' | 'light'): string {
+  return theme === 'dark' ? 'dark' : 'liberty';
 }
 
 export function resetEndpoints(): Endpoints {

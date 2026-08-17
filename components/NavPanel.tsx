@@ -45,7 +45,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
           <div
             className={cn(
               'flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl transition-colors',
-              imminent ? 'bg-sky-400 text-slate-950' : 'bg-raised text-sky-300'
+              imminent ? 'bg-sky-400 text-slate-950' : 'bg-raised text-sky-700 dark:text-sky-300'
             )}
           >
             <ManeuverIcon kind={step.kind} className="h-9 w-9" />
@@ -96,7 +96,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
               onClick={onCancel}
               aria-label="Cancel route"
               title="Cancel route"
-              className="rounded-full border border-rose-500/40 bg-rose-500/20 p-2.5 text-rose-200 transition hover:bg-rose-500/30"
+              className="rounded-full border border-rose-500/40 bg-rose-500/20 p-2.5 text-rose-700 transition dark:text-rose-200 hover:bg-rose-500/30"
             >
               <X className="h-5 w-5" />
             </button>

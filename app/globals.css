@@ -79,6 +79,25 @@ body {
   padding-right: max(0.75rem, env(safe-area-inset-right));
 }
 
+/* Full-screen overlays, which have to clear the notch on all four sides. */
+.safe-pad {
+  padding-top: max(1rem, env(safe-area-inset-top));
+  padding-right: max(1rem, env(safe-area-inset-right));
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  padding-left: max(1rem, env(safe-area-inset-left));
+}
+
+/*
+ * The space a floating panel actually has. Sizing off raw 100vw/100vh puts a
+ * centred card under the notch in landscape, and `vh` on iOS Safari is the
+ * URL-bar-hidden height, so a panel measured in `vh` runs off the bottom while
+ * the bar is still showing. Both are what these subtract out.
+ */
+:root {
+  --safe-w: calc(100dvw - env(safe-area-inset-left) - env(safe-area-inset-right));
+  --safe-h: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+}
+
 /*
  * Cap the bottom sheet so it can never run off the screen. It has to clear the
  * status bar above and the home indicator below, and scroll internally rather
@@ -123,39 +142,106 @@ body {
   color: rgb(var(--accent-fg));
 }
 
-/* Keep MapLibre's own controls clear of the bottom sheet and home indicator. */
-.maplibregl-ctrl-bottom-left,
-.maplibregl-ctrl-bottom-right {
+/* Page backdrop for the non-map routes, in both themes. */
+.page-backdrop {
+  background:
+    radial-gradient(circle at top, rgb(var(--raised)) 0%, rgb(var(--page)) 55%, rgb(var(--page)) 100%);
+}
+
+/*
+ * MapLibre overrides.
+ *
+ * Every selector here is scoped through .maplibregl-map .maplibregl-control-container
+ * on purpose. maplibre-gl.css is imported from NavMap and so lands *after*
+ * this file, and a tie on specificity goes to whoever comes last. Bare
+ * `.maplibregl-ctrl-group` here silently lost every one of these — the
+ * controls rendered in MapLibre's light theme and sat at `bottom: 0`, behind
+ * the search sheet and under the home indicator. Two ancestor classes rather
+ * than one because MapLibre doubles up on its own elements, e.g.
+ * `.maplibregl-ctrl.maplibregl-ctrl-attrib`.
+ */
+
+/* Clear of the bottom sheet, and of the home indicator below it. */
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-left,
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-right {
   bottom: calc(13rem + env(safe-area-inset-bottom));
 }
 
 @media (max-width: 640px) {
-  .maplibregl-ctrl-bottom-left,
-  .maplibregl-ctrl-bottom-right {
+  .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-left,
+  .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-right {
     bottom: calc(9rem + env(safe-area-inset-bottom));
   }
 }
 
-.maplibregl-ctrl-attrib.maplibregl-compact {
-  background: rgba(15, 23, 42, 0.85);
-  color: #cbd5e1;
+/* Landscape on a notched phone puts the whole side bezel over these corners. */
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-top-left,
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-top-right {
+  top: env(safe-area-inset-top);
 }
 
-.maplibregl-ctrl-attrib a {
-  color: #7dd3fc;
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-top-left,
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-left {
+  left: env(safe-area-inset-left);
 }
 
-.maplibregl-ctrl-group {
-  background: rgba(15, 23, 42, 0.9);
-  border: 1px solid rgba(148, 163, 184, 0.18);
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-top-right,
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-right {
+  right: env(safe-area-inset-right);
 }
 
-.maplibregl-ctrl-group button + button {
-  border-top-color: rgba(148, 163, 184, 0.18);
+/* Compact carries its own background at the same weight, so it needs naming. */
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib,
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib.maplibregl-compact {
+  background: rgb(var(--surface) / 0.88);
+  color: rgb(var(--muted));
 }
 
-.maplibregl-ctrl-group button span {
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib a {
+  color: rgb(var(--accent-fg));
+}
+
+/*
+ * Expanded, the attribution spans the full width of its corner, so on a phone
+ * it slides under the zoom buttons and clips "OpenStreetMap" against the
+ * bezel. Stop it short of that corner and let it wrap — the credit is a
+ * licence term, so it has to stay legible rather than just fit.
+ */
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib.maplibregl-compact-show {
+  /* MapLibre re-declares content-box over the global reset, and it carries
+     36px of padding for the ⓘ — so without this the cap is 36px short. */
+  box-sizing: border-box;
+  max-width: calc(100% - 3.5rem);
+}
+
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib-inner {
+  white-space: normal;
+}
+
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-group {
+  background: rgb(var(--surface) / 0.92);
+  border: 1px solid rgb(var(--line) / 0.6);
+}
+
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-group button + button {
+  border-top-color: rgb(var(--line) / 0.6);
+}
+
+/*
+ * MapLibre's control glyphs are dark SVGs sized for its own white buttons.
+ * They need flipping over a dark surface and left alone over a light one —
+ * inverting unconditionally is what made them vanish before.
+ */
+:root[data-theme='dark'] .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-group button span,
+:root[data-theme='dark'] .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib-button {
   filter: invert(1);
+}
+
+/* The scale bar reads as black-on-black without this. */
+.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-scale {
+  background: rgb(var(--surface) / 0.88);
+  border-color: rgb(var(--line));
+  color: rgb(var(--muted));
 }
 
 /* Trip stop pins */
