@@ -1,11 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl, { GeoJSONSource, LngLatBoundsLike, Map, MapMouseEvent, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { TERRAIN_DEM_URL, appEnv, resolveMapStyleUrl } from '@/lib/config';
+import { TERRAIN_DEM_URL, appEnv, getGoogleMapsKey, googleMapTypeFor, resolveMapStyle } from '@/lib/config';
+import { GOOGLE_PROTOCOL, fetchGoogleCopyright, googleTileProtocol } from '@/lib/services/googleTiles';
 import { boundsOf } from '@/lib/geometry';
 import { ChargerSite, Coordinate, HazardReport, Place, RoadAlert, RouteResponse, TrafficJam, UserPosition, Waypoint } from '@/types/map';
+
+// Global to maplibregl, so it is registered once for the module rather than
+// per mount. Harmless when no Google basemap is ever selected.
+maplibregl.addProtocol(GOOGLE_PROTOCOL, googleTileProtocol);
 
 type Props = {
   center: Coordinate;
@@ -112,6 +117,8 @@ export function NavMap({
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
+  /** Live copyright for the Google tiles on screen; '' when not on Google. */
+  const [googleCopyright, setGoogleCopyright] = useState('');
   const userMarkerRef = useRef<Marker | null>(null);
   const waypointMarkersRef = useRef<Marker[]>([]);
   const styleReadyRef = useRef(false);
@@ -434,7 +441,7 @@ export function NavMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: resolveMapStyleUrl(styleId),
+      style: resolveMapStyle(styleId),
       center: [center.lng, center.lat],
       zoom: appEnv.defaultZoom,
       attributionControl: false,
@@ -472,7 +479,7 @@ export function NavMap({
       // applied first is what stops the resulting styledata re-entering here.
       if (appliedStyleRef.current !== styleIdRef.current) {
         appliedStyleRef.current = styleIdRef.current;
-        map.setStyle(resolveMapStyleUrl(styleIdRef.current), { diff: false });
+        map.setStyle(resolveMapStyle(styleIdRef.current), { diff: false });
         return true;
       }
 
@@ -552,7 +559,7 @@ export function NavMap({
     if (!map || !styleReadyRef.current) return;
     if (appliedStyleRef.current === styleId) return;
     appliedStyleRef.current = styleId;
-    map.setStyle(resolveMapStyleUrl(styleId), { diff: false });
+    map.setStyle(resolveMapStyle(styleId), { diff: false });
   }, [styleId]);
 
   /* --------------------------------------------- overlay data -> sources */
@@ -708,8 +715,86 @@ export function NavMap({
     }
   }, [center, navActive]);
 
+  /* ------------------------------------------ Google tile attribution */
+  /**
+   * Google requires their logo and the copyright for the tiles actually in
+   * view, refreshed as the viewport changes — the credits differ by region, so
+   * a hardcoded string would be wrong most of the time. Only mounted while a
+   * Google basemap is selected; every other style carries its attribution in
+   * the style JSON, which MapLibre's own control already renders.
+   */
+  const googleMapType = googleMapTypeFor(styleId);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !googleMapType) {
+      setGoogleCopyright('');
+      return;
+    }
+
+    const key = getGoogleMapsKey();
+    if (!key) return;
+
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+
+    const refresh = () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        const bounds = map.getBounds();
+        fetchGoogleCopyright(
+          googleMapType,
+          key,
+          {
+            north: bounds.getNorth(),
+            south: bounds.getSouth(),
+            east: bounds.getEast(),
+            west: bounds.getWest()
+          },
+          map.getZoom(),
+          controller.signal
+        )
+          .then(setGoogleCopyright)
+          // A failed credit lookup must not blank the credit already shown.
+          .catch(() => {});
+      }, 400);
+    };
+
+    refresh();
+    map.on('moveend', refresh);
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+      map.off('moveend', refresh);
+    };
+  }, [googleMapType]);
+
   // Inline styles rather than utility classes: maplibre-gl.css sets
   // `.maplibregl-map { position: relative }` and loads after Tailwind, which
   // would otherwise win and collapse the container to zero height.
-  return <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />;
+  return (
+    <div style={{ position: 'absolute', inset: 0 }}>
+      <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
+      {googleMapType ? (
+        <div className="google-credit">
+          {/* Google's own asset: their logo is a trademark, so it is served
+              from their CDN rather than redrawn. The dark wordmark is for the
+              light roadmap; satellite imagery needs the white one. */}
+          {/* eslint-disable-next-line @next/next/no-img-element -- next/image
+              buys nothing here: the export runs unoptimized, and this is an
+              18px trademark that has to come from Google's own CDN. */}
+          <img
+            src={
+              googleMapType === 'satellite'
+                ? 'https://maps.gstatic.com/mapfiles/api-3/images/google_white5.png'
+                : 'https://maps.gstatic.com/mapfiles/api-3/images/google4.png'
+            }
+            alt="Google"
+            height={18}
+          />
+          {googleCopyright ? <span>{googleCopyright}</span> : null}
+        </div>
+      ) : null}
+    </div>
+  );
 }

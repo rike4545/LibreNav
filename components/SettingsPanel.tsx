@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { BatteryCharging, Coffee, Globe, History, KeyRound, Play, RotateCcw, Server, Volume2, X } from 'lucide-react';
-import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, getLocalDataKey, resetEndpoints, saveEndpoints, saveLocalDataKey } from '@/lib/config';
+import { DEFAULT_ENDPOINTS, Endpoints, availableMapStyles, getEndpoints, getGoogleMapsKey, getLocalDataKey, resetEndpoints, saveEndpoints, saveGoogleMapsKey, saveLocalDataKey } from '@/lib/config';
+import { resetGoogleSessions, verifyGoogleMapsKey } from '@/lib/services/googleTiles';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
 import { Preferences, ThemeChoice, TripRecord } from '@/lib/storage';
 import { VoiceSettings, getServerVoicesSnapshot, getVoicesSnapshot, onVoicesChanged, previewVoice, speechSupported } from '@/lib/voice';
@@ -47,6 +48,32 @@ export function SettingsPanel({
   const [saved, setSaved] = useState(false);
   const [localDataKey, setLocalDataKey] = useState(() => getLocalDataKey());
   const [keySaved, setKeySaved] = useState(false);
+  const [googleKey, setGoogleKey] = useState(() => getGoogleMapsKey());
+  const [googleSaved, setGoogleSaved] = useState(false);
+  const [googleStatus, setGoogleStatus] = useState<{ ok: boolean; message: string } | null>(null);
+  const [googleChecking, setGoogleChecking] = useState(false);
+
+  // Recomputed per render rather than memoised: saving a Google key has to make
+  // those two styles appear in the picker straight away.
+  const mapStyles = availableMapStyles();
+
+  async function applyGoogleKey() {
+    // Sessions are minted per key, so a cached one is worthless after a change.
+    resetGoogleSessions();
+    setGoogleChecking(true);
+    setGoogleStatus(null);
+
+    const result = await verifyGoogleMapsKey(googleKey);
+    setGoogleChecking(false);
+    setGoogleStatus(result);
+    // Only keep a key that actually works — storing a bad one just produces a
+    // blank basemap later with nothing explaining it.
+    if (!result.ok) return;
+
+    saveGoogleMapsKey(googleKey);
+    setGoogleSaved(true);
+    setTimeout(() => setGoogleSaved(false), 2200);
+  }
 
   function applyLocalDataKey() {
     saveLocalDataKey(localDataKey);
@@ -139,7 +166,7 @@ export function SettingsPanel({
           <div className="mt-3">
             <div className="text-xs font-medium text-muted">Map style</div>
             <div className="mt-2 flex flex-wrap gap-1.5">
-              {MAP_STYLES.map((style) => (
+              {mapStyles.map((style) => (
                 <button
                   key={style.id}
                   type="button"
@@ -389,8 +416,83 @@ export function SettingsPanel({
             >
               Remove
             </button>
-            {keySaved ? <span className="text-xs font-medium text-emerald-300">Saved</span> : null}
+            {keySaved ? <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Saved</span> : null}
           </div>
+        </Section>
+
+        <Section title="Google Maps key (optional)" icon={<KeyRound className="h-4 w-4" />}>
+          <p className="mb-3 text-xs leading-relaxed text-subtle">
+            Adds Google and Google satellite to the map style list above. Needs a key from{' '}
+            <a
+              href="https://developers.google.com/maps/documentation/tile/get-api-key"
+              target="_blank"
+              rel="noreferrer noopener"
+              className="text-accent underline-offset-2 hover:underline"
+            >
+              Google Cloud
+            </a>{' '}
+            with the Map Tiles API enabled. Everything else in LibreNav keeps working without it.
+          </p>
+          <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-fg">
+            Google bills this key per tile request, so restrict it to your own domain in Cloud Console
+            — a static site cannot hide a key from anyone who opens the network tab. Stored only in
+            this browser, like the key above.
+          </p>
+
+          <label className="block">
+            <span className="block text-xs font-medium text-muted">API key</span>
+            <input
+              type="password"
+              value={googleKey}
+              placeholder="Paste your Google Maps key"
+              spellCheck={false}
+              autoComplete="off"
+              onChange={(event) => setGoogleKey(event.target.value)}
+              className="mt-1 w-full rounded-lg border border-line bg-raised px-3 py-2 text-sm text-fg outline-none focus:border-sky-400"
+            />
+          </label>
+
+          <div className="mt-3 flex items-center gap-2">
+            <button
+              type="button"
+              onClick={applyGoogleKey}
+              disabled={googleChecking}
+              className="rounded-full bg-sky-500 px-4 py-2 text-sm font-semibold text-slate-950 transition hover:bg-sky-400 disabled:opacity-60"
+            >
+              {googleChecking ? 'Checking…' : 'Save key'}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setGoogleKey('');
+                saveGoogleMapsKey('');
+                resetGoogleSessions();
+                // Leaving a Google basemap selected with no key would strand a
+                // style the picker no longer offers, so step back to Streets.
+                if (preferences.mapStyleId.startsWith('google-')) {
+                  onPreferencesChange({ ...preferences, mapStyleId: 'auto' });
+                }
+                setGoogleStatus(null);
+                setGoogleSaved(true);
+                setTimeout(() => setGoogleSaved(false), 2200);
+              }}
+              className="rounded-full border border-line bg-raised px-4 py-2 text-sm font-medium text-muted transition hover:bg-strong"
+            >
+              Remove
+            </button>
+            {googleSaved ? <span className="text-xs font-medium text-emerald-700 dark:text-emerald-300">Saved</span> : null}
+          </div>
+
+          {googleStatus ? (
+            <p
+              className={cn(
+                'mt-2 text-xs leading-relaxed',
+                googleStatus.ok ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'
+              )}
+            >
+              {googleStatus.message}
+            </p>
+          ) : null}
         </Section>
 
         <a

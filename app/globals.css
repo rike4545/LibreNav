@@ -244,6 +244,44 @@ body {
   color: rgb(var(--muted));
 }
 
+/*
+ * Google tile credit.
+ *
+ * Google asks for their logo at 16dp or more plus the viewport's copyright
+ * line, in the bottom corner of the tiles. It sits opposite MapLibre's own
+ * attribution so the two never overlap, and clears the sheet by the same
+ * amount the map controls do.
+ */
+.google-credit {
+  position: absolute;
+  right: 0.5rem;
+  bottom: calc(13rem + env(safe-area-inset-bottom));
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  max-width: calc(100% - 4.5rem);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.4rem;
+  background: rgb(var(--surface) / 0.88);
+  color: rgb(var(--muted));
+  font-size: 10px;
+  line-height: 1.3;
+  pointer-events: none;
+}
+
+.google-credit img {
+  height: 18px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .google-credit {
+    bottom: calc(9rem + env(safe-area-inset-bottom));
+  }
+}
+
 /* Trip stop pins */
 .nav-waypoint-marker {
   display: flex;

@@ -33,7 +33,7 @@ import { SearchPanel } from '@/components/SearchPanel';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { SpeedPanel } from '@/components/SpeedPanel';
 import { useResolvedTheme } from '@/components/ThemeSync';
-import { MAP_STYLES, appEnv, autoMapStyleId } from '@/lib/config';
+import { appEnv, autoMapStyleId, availableMapStyles } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
 import { boundsOf, boxAround, haversineMeters, pathAhead } from '@/lib/geometry';
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
@@ -1080,26 +1080,22 @@ export function MapShell() {
   }
 
   function updatePreferences(next: Preferences) {
-    // Switching theme should carry the basemap with it — a light map under dark
-    // chrome (or the reverse) is exactly what made the sheets hard to read.
-    if (next.theme !== preferences.theme && next.mapStyleId === preferences.mapStyleId) {
-      const resolved =
-        next.theme === 'system'
-          ? window.matchMedia('(prefers-color-scheme: light)').matches
-            ? 'light'
-            : 'dark'
-          : next.theme;
-      const wanted = resolved === 'dark' ? 'dark' : 'liberty';
-      if (MAP_STYLES.some((style) => style.id === wanted)) next = { ...next, mapStyleId: wanted };
-    }
-
+    // A theme change used to rewrite mapStyleId to 'dark' or 'liberty' so the
+    // basemap followed the chrome. The 'auto' style does that now, and doing
+    // both is worse than either: it overwrote 'auto' with a fixed id — killing
+    // the very behaviour it was imitating — and it also overrode a deliberate
+    // pick, so choosing Voyager or Google and then flipping theme threw the
+    // choice away. Explicit choices stand; 'auto' is how you opt into following.
     setPreferences(savePreferences(next));
     if (!next.voiceGuidance) stopSpeaking();
   }
 
   function cycleMapStyle() {
-    const index = MAP_STYLES.findIndex((style) => style.id === preferences.mapStyleId);
-    const next = MAP_STYLES[(index + 1) % MAP_STYLES.length];
+    // Only what the picker offers: the Google entries are absent until a key is
+    // saved, so the button must not be able to land on one either.
+    const styles = availableMapStyles();
+    const index = styles.findIndex((style) => style.id === preferences.mapStyleId);
+    const next = styles[(index + 1) % styles.length];
     updatePreferences({ ...preferences, mapStyleId: next.id });
     showToast(`Map style: ${next.label}`);
   }

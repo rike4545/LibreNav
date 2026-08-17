@@ -1,3 +1,5 @@
+import type { StyleSpecification } from 'maplibre-gl';
+import { GoogleMapType, googleMapStyle } from '@/lib/services/googleTiles';
 import { VehicleProfile } from '@/types/map';
 
 /**
@@ -18,6 +20,8 @@ export type MapStyleOption = {
   url: string;
   /** Dark styles get light-on-dark route colors and UI chrome. */
   dark: boolean;
+  /** Unusable until the driver supplies their own Google Maps key. */
+  needsGoogleKey?: boolean;
 };
 
 /**
@@ -31,7 +35,11 @@ export const MAP_STYLES: MapStyleOption[] = [
   { id: 'dark', label: 'Dark', url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json', dark: true },
   { id: 'positron', label: 'Minimal', url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json', dark: false },
   { id: 'voyager', label: 'Voyager', url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json', dark: false },
-  { id: 'bright', label: 'Bright', url: 'https://tiles.openfreemap.org/styles/bright', dark: false }
+  { id: 'bright', label: 'Bright', url: 'https://tiles.openfreemap.org/styles/bright', dark: false },
+  // Built at runtime from the Map Tiles API, so no URL and no use without a
+  // key of your own. resolveMapStyle turns these into a style object.
+  { id: 'google-roadmap', label: 'Google', url: '', dark: false, needsGoogleKey: true },
+  { id: 'google-satellite', label: 'Google satellite', url: '', dark: true, needsGoogleKey: true }
 ];
 
 /** 'auto' heads the list but carries no URL, so it can't be the fallback. */
@@ -50,7 +58,7 @@ export const DEFAULT_ENDPOINTS: Endpoints = {
   // Komoot hosts the public Photon geocoder. Fair-use, no key.
   photonUrl: process.env.NEXT_PUBLIC_PHOTON_URL || 'https://photon.komoot.io',
   overpassUrl: process.env.NEXT_PUBLIC_OVERPASS_URL || 'https://overpass-api.de/api/interpreter',
-  mapStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL || MAP_STYLES[0].url
+  mapStyleUrl: process.env.NEXT_PUBLIC_MAP_STYLE_URL || FALLBACK_MAP_STYLE.url
 };
 
 /**
@@ -82,6 +90,7 @@ export const appEnv = {
 
 const ENDPOINTS_KEY = 'librenav.endpoints';
 const API_KEY_KEY = 'librenav.localDataKey';
+const GOOGLE_KEY_KEY = 'librenav.googleMapsKey';
 
 /** OpenWeb Ninja Real-Time Local & Maps Data. */
 export const LOCAL_DATA_BASE = 'https://api.openwebninja.com/realtime-local-and-maps-data';
@@ -108,6 +117,39 @@ export function saveLocalDataKey(key: string): void {
   const trimmed = key.trim();
   if (trimmed) window.localStorage.setItem(API_KEY_KEY, trimmed);
   else window.localStorage.removeItem(API_KEY_KEY);
+}
+
+/**
+ * Google Maps key for the Map Tiles API basemaps. Same reasoning as the local
+ * data key above: this browser only, never the bundle or the repo.
+ *
+ * Google bills this key, so restrict it to your own origin in Cloud Console —
+ * a static site cannot hide it from anyone who opens the network tab.
+ */
+export function getGoogleMapsKey(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    return window.localStorage.getItem(GOOGLE_KEY_KEY) ?? '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveGoogleMapsKey(key: string): void {
+  if (typeof window === 'undefined') return;
+  const trimmed = key.trim();
+  if (trimmed) window.localStorage.setItem(GOOGLE_KEY_KEY, trimmed);
+  else window.localStorage.removeItem(GOOGLE_KEY_KEY);
+}
+
+export function hasGoogleMapsKey(): boolean {
+  return getGoogleMapsKey().length > 0;
+}
+
+/** Google basemaps are hidden in the picker until a key exists. */
+export function availableMapStyles(): MapStyleOption[] {
+  const google = hasGoogleMapsKey();
+  return MAP_STYLES.filter((style) => !style.needsGoogleKey || google);
 }
 
 let cached: Endpoints | null = null;
@@ -153,6 +195,30 @@ export function resolveMapStyleUrl(styleId: string): string {
   // 'auto' carries no URL of its own — callers are expected to have swapped it
   // for a concrete id already. Falling through to Streets beats a blank map.
   return match?.url || FALLBACK_MAP_STYLE.url;
+}
+
+/**
+ * The style to hand MapLibre: a URL for the hosted basemaps, or a built style
+ * object for Google, whose tiles need a session token minted per map type.
+ *
+ * Falls back when a Google basemap is selected without a key — better a working
+ * map than a blank one, and the picker hides those entries anyway.
+ */
+export function resolveMapStyle(styleId: string): string | StyleSpecification {
+  const match = MAP_STYLES.find((style) => style.id === styleId);
+  if (match?.needsGoogleKey) {
+    const key = getGoogleMapsKey();
+    if (!key) return resolveMapStyleUrl(FALLBACK_MAP_STYLE.id);
+    return googleMapStyle(styleId === 'google-satellite' ? 'satellite' : 'roadmap', key);
+  }
+  return resolveMapStyleUrl(styleId);
+}
+
+/** The Google map type behind a style id, or null if it is not a Google one. */
+export function googleMapTypeFor(styleId: string): GoogleMapType | null {
+  if (styleId === 'google-roadmap') return 'roadmap';
+  if (styleId === 'google-satellite') return 'satellite';
+  return null;
 }
 
 /** Which concrete basemap 'auto' means at a given UI theme. */
