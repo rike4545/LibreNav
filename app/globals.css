@@ -109,6 +109,15 @@ body {
   overscroll-behavior: contain;
 }
 
+/* Sideways-scrolling chip rows read as clutter with a bar under them. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* Links on tinted cards; sky-300 is unreadable on a light surface. */
 .text-accent {
   color: rgb(var(--accent-fg));
