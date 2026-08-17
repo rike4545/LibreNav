@@ -77,7 +77,11 @@ export function DeparturePlanner({ travelSeconds, target, onChange }: Props) {
               <span className="font-semibold text-fg">Leave now</span>
               <span className="text-muted">
                 {' '}
-                — arriving {describeShortfall(plan.lateSeconds)} late at {clockAt(Date.now() + travelSeconds * 1000)}
+                {/* Derived from the plan rather than a second Date.now(): late
+                    arrival is the target plus however late it runs, and that
+                    keeps it on the same clock reading the plan used. */}
+                — arriving {describeShortfall(plan.lateSeconds)} late at{' '}
+                {clockAt(plan.arrivalMs + plan.lateSeconds * 1000)}
               </span>
             </>
           )}

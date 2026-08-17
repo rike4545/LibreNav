@@ -123,10 +123,17 @@ export function NavMap({
   // Handlers land in map event callbacks that are registered once; refs keep
   // those callbacks pointing at the current props without re-binding listeners.
   const handlersRef = useRef({ onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange });
-  handlersRef.current = { onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange };
-
   const dataRef = useRef({ route, activeAlternativeId, chargers, places, reports, alerts, jams });
-  dataRef.current = { route, activeAlternativeId, chargers, places, reports, alerts, jams };
+
+  // Both were assigned during render, which React does not allow — a render
+  // that gets thrown away (StrictMode, a concurrent retry) would still have
+  // moved the ref. Refreshing them here keeps the same "latest props without
+  // re-binding listeners" behaviour, and this effect is declared above every
+  // effect that reads them so it commits first.
+  useEffect(() => {
+    handlersRef.current = { onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange };
+    dataRef.current = { route, activeAlternativeId, chargers, places, reports, alerts, jams };
+  });
 
   /**
    * Push the current data into every source.

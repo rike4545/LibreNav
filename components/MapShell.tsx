@@ -271,7 +271,6 @@ export function MapShell() {
       }
     });
     // clearRoute is stable enough for the life of the bridge.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [embed]);
 
   /* ---------------------------------------------------------- theming */
@@ -282,6 +281,9 @@ export function MapShell() {
 
   /* -------------------------------------------------- persisted state */
   useEffect(() => {
+    // Static export prerenders this component, so localStorage cannot be read
+    // until after mount. Seeding these in an effect is the point, not a slip.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setSaved(getSavedPlaces());
     setRecents(getRecents());
     setReports(getReports());
@@ -311,6 +313,8 @@ export function MapShell() {
     const shared = decodeTrip(window.location.search);
     if (!shared) return;
 
+    // Same reason: window.location is only readable once mounted.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setOptions(shared.options);
     setMapCenter(shared.waypoints[0].coordinate);
     setPanelOpen(false);
@@ -365,6 +369,9 @@ export function MapShell() {
 
   useEffect(() => {
     if (waypoints.length < 2) {
+      // Clearing here rather than in cleanup on purpose — cleanup also runs
+      // between two valid routes, which would blank the line mid-recompute.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setRoute(null);
       setRouteError(null);
       setProgress(null);
@@ -412,6 +419,9 @@ export function MapShell() {
   /* ------------------------------- road data for the current route */
   useEffect(() => {
     if (!route) {
+      // As above: dropping these on every route recompute would strip the
+      // speed limits and cameras off a route that still has them.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSpeedLimits([]);
       setCameras([]);
       setElevation(null);
@@ -435,7 +445,10 @@ export function MapShell() {
       .catch(() => setElevation(null));
 
     return () => controller.abort();
-  }, [route]);
+    // options.mode is read above. In practice a mode change also produces a
+    // new route, but depending on it directly is what makes that a fact
+    // rather than a coincidence.
+  }, [route, options.mode]);
 
   /**
    * Advance the traffic box as the drive progresses.
@@ -467,6 +480,7 @@ export function MapShell() {
     // to the centre would fire a metered request on app open for a default
     // location nobody is driving through, and again on every pan.
     if (route || !userPosition) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFreeTrafficAnchor(null);
       return;
     }
@@ -505,6 +519,9 @@ export function MapShell() {
   /* --------------------------------------------------------- live traffic */
   useEffect(() => {
     if (!trafficBounds || !hasLocalDataKey()) {
+      // Cleanup would clear on every bounds change, i.e. every pan, and the
+      // alerts would strobe. Only the loss of a key or bounds should empty it.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setLiveAlerts([]);
       setJams([]);
       return;
@@ -570,7 +587,7 @@ export function MapShell() {
     if (!route || !navIndexRef.current) return all;
 
     return positionAlertsOnRoute(all, route.coordinates, navIndexRef.current.cumulative);
-  }, [route, cameras, liveAlerts, reports, speedLimits]);
+  }, [route, cameras, liveAlerts, reports]);
 
   /**
    * Same alerts, minus the driver's own.
@@ -631,6 +648,11 @@ export function MapShell() {
       );
       if (warning) speak(warning);
     }
+    // upcomingAlert is read but deliberately not a dependency: it is derived
+    // from the same GPS tick that already re-runs this effect, so the closure
+    // is current, and depending on it would re-enter the announcer between
+    // ticks.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [navActive, route, userPosition, preferences.voiceGuidance, preferences.imperial, rerouting]);
 
   /* --------------------------------------------------------- rerouting */
@@ -658,6 +680,9 @@ export function MapShell() {
   /* ------------------------------------------------- GPS track recording */
   useEffect(() => {
     if (!recording || !userPosition) return;
+    // Accumulating a stream of GPS fixes: each new position appends, so the
+    // write is the effect's whole purpose and has nowhere else to live.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setTrack((current) => {
       const last = current[current.length - 1];
       // Drop near-duplicate fixes so a parked car doesn't bloat the GPX.
@@ -669,6 +694,9 @@ export function MapShell() {
   /* ---------------------------------------------------------- chargers */
   useEffect(() => {
     if (!preferences.showChargers) {
+      // Only when chargers are switched off. Clearing in cleanup would empty
+      // the map on every pan and read as "no chargers near you".
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setChargers([]);
       // Forget the anchor so re-enabling refetches instead of waiting for the
       // view to move past the distance gate below.
@@ -713,6 +741,10 @@ export function MapShell() {
       if (retryTimer) clearTimeout(retryTimer);
       controller.abort();
     };
+    // The coordinates, not the object: mapCenter is rebuilt on every map move,
+    // so depending on it would defeat the distance gate above and re-query
+    // Overpass continuously.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mapCenter.lat, mapCenter.lng, preferences.showChargers, chargerAttempt]);
 
   const visibleChargers = useMemo(
@@ -1100,6 +1132,9 @@ export function MapShell() {
   /* ------------------------------------------- routing around bad jams */
   useEffect(() => {
     if (!route || !trafficDelay?.onRoute.length || waypoints.length < 2) {
+      // trafficDelay and jams change on every traffic poll, so clearing from
+      // cleanup would dismiss and re-raise the detour banner on each tick.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDetour(null);
       return;
     }
@@ -1152,10 +1187,7 @@ export function MapShell() {
 
   /* ----------------------------------------------- weather at destination */
   useEffect(() => {
-    if (!route || !destination) {
-      setWeather(null);
-      return;
-    }
+    if (!route || !destination) return;
 
     const controller = new AbortController();
     // Forecast for arrival, not departure — that is the whole point of asking.
@@ -1171,7 +1203,15 @@ export function MapShell() {
       .then(setWeather)
       .catch(() => setWeather(null));
 
-    return () => controller.abort();
+    // Dropping the old forecast belongs here rather than in the guard above:
+    // cleanup runs on the way out of every one of these dependencies, so a
+    // forecast for the previous destination or arrival time can never outlive
+    // the trip it described. These deps deliberately exclude the traffic tick,
+    // so this does not thrash.
+    return () => {
+      controller.abort();
+      setWeather(null);
+    };
     // Re-fetching on every traffic tick would be wasteful; the route and the
     // planned arrival are what actually change the answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps

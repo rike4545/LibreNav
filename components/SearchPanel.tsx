@@ -127,6 +127,10 @@ export function SearchPanel({
   useEffect(() => {
     const trimmed = query.trim();
     if (trimmed.length < 2) {
+      // Resetting a debounced search once the query drops below the minimum.
+      // Deriving it at the call sites would leave `searching` stuck on for a
+      // query that was abandoned mid-flight.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setResults([]);
       setSearching(false);
       setError(null);

@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { BatteryCharging, Coffee, Globe, History, KeyRound, Play, RotateCcw, Server, Volume2, X } from 'lucide-react';
 import { DEFAULT_ENDPOINTS, Endpoints, MAP_STYLES, getEndpoints, getLocalDataKey, resetEndpoints, saveEndpoints, saveLocalDataKey } from '@/lib/config';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
 import { Preferences, ThemeChoice, TripRecord } from '@/lib/storage';
-import { VoiceSettings, listVoices, onVoicesChanged, previewVoice, speechSupported } from '@/lib/voice';
+import { VoiceSettings, getServerVoicesSnapshot, getVoicesSnapshot, onVoicesChanged, previewVoice, speechSupported } from '@/lib/voice';
 import { cn } from '@/lib/utils';
 import { VehicleProfile } from '@/types/map';
 
@@ -38,11 +38,10 @@ export function SettingsPanel({
   onClose
 }: Props) {
   // Voices populate asynchronously; the first getVoices() is usually empty.
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => listVoices());
-  useEffect(() => {
-    setVoices(listVoices());
-    return onVoicesChanged(() => setVoices(listVoices()));
-  }, []);
+  // This is a subscription to a browser store, so it reads as one rather than
+  // as state seeded in an effect — which also drops the extra render that the
+  // seeding pass used to cost on open.
+  const voices = useSyncExternalStore(onVoicesChanged, getVoicesSnapshot, getServerVoicesSnapshot);
 
   const [endpoints, setEndpoints] = useState<Endpoints>(() => getEndpoints());
   const [saved, setSaved] = useState(false);
