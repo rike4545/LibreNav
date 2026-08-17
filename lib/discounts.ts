@@ -70,6 +70,36 @@ export const discountSections: DiscountSection[] = [
     ]
   },
   {
+    id: 'tesla-tools',
+    title: 'Tesla owner tools',
+    description: 'Things the car itself can run, and the toolchain for the light show.',
+    footnote: 'Tesla publishes light-show with no licence file, so treat the sequences as samples rather than as something to redistribute.',
+    items: [
+      {
+        title: 'Tesla Light Show',
+        href: 'https://github.com/teslamotors/light-show',
+        description:
+          "Tesla's own repo for building custom light shows in xLights and loading them over USB. Model 3/Y, 2021+ S/X, and Cybertruck.",
+        deal: 'Official',
+        kind: 'resource'
+      },
+      {
+        title: 'A Better Theater',
+        href: 'https://members.abettertheater.com/',
+        description:
+          'One full-screen launcher for streaming, games, and web tools on the car browser, played through subscriptions you already hold.',
+        deal: 'Free + paid tiers',
+        kind: 'partner'
+      },
+      {
+        title: 'TeslaNav',
+        href: 'https://teslanav.com/',
+        description: 'Waze police and traffic alerts as a page built for the Tesla browser. Wants location access to work.',
+        kind: 'partner'
+      }
+    ]
+  },
+  {
     id: 'charging-programs',
     title: 'Charging networks',
     description: 'Programs that reduce public charging costs or unlock member pricing.',

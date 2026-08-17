@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { BatteryCharging, Car, Landmark, Map, ScanEye, Search, ShoppingBag, Wallet, X } from 'lucide-react';
+import { BatteryCharging, Car, Landmark, Map, ScanEye, Search, ShoppingBag, Sparkles, Wallet, X } from 'lucide-react';
 import type { DiscountLink, DiscountLinkKind, DiscountSection } from '@/lib/discounts';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +17,7 @@ const DEAL_TONE: Record<DiscountLinkKind, string> = {
 
 const SECTION_ICON: Record<string, typeof Car> = {
   'tesla-ev': Car,
+  'tesla-tools': Sparkles,
   'charging-programs': BatteryCharging,
   'planning-tools': Map,
   incentives: Landmark,
@@ -117,8 +118,9 @@ export function DiscountBrowser({ sections }: Props) {
           />
         </label>
 
-        {/* Seven chips wrap to four rows on a phone and push the first card off
-            screen, so below `sm` they scroll sideways on one line instead. */}
+        {/* One chip per section wraps to several rows on a phone and pushes the
+            first card off screen, and it gets worse with each section added, so
+            below `sm` they scroll sideways on one line instead. */}
         <div className="no-scrollbar -mx-4 flex gap-2 overflow-x-auto px-4 sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0">
           <button
             type="button"
