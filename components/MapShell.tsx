@@ -275,21 +275,10 @@ export function MapShell() {
   }, [embed]);
 
   /* ---------------------------------------------------------- theming */
-  useEffect(() => {
-    const root = document.documentElement;
-    const media = window.matchMedia('(prefers-color-scheme: light)');
-
-    const apply = () => {
-      const resolved = preferences.theme === 'system' ? (media.matches ? 'light' : 'dark') : preferences.theme;
-      root.dataset.theme = resolved;
-    };
-
-    apply();
-    // Only track the OS while actually following it.
-    if (preferences.theme !== 'system') return;
-    media.addEventListener('change', apply);
-    return () => media.removeEventListener('change', apply);
-  }, [preferences.theme]);
+  // ThemeSync in the root layout owns data-theme now. It does what this effect
+  // did and covers /discounts too, picks the theme up before first paint, and
+  // follows other tabs. updatePreferences writes through savePreferences, which
+  // is what tells it a change happened.
 
   /* -------------------------------------------------- persisted state */
   useEffect(() => {
