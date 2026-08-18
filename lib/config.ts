@@ -17,33 +17,82 @@ export type Endpoints = {
 export type MapStyleOption = {
   id: string;
   label: string;
+  /** Basemap under a light UI. */
   url: string;
-  /** Dark styles get light-on-dark route colors and UI chrome. */
-  dark: boolean;
+  /** The same basemap's dark counterpart, used under a dark UI. */
+  darkUrl: string;
   /** Unusable until the driver supplies their own Google Maps key. */
   needsGoogleKey?: boolean;
 };
 
 /**
- * Free, key-less vector styles. OpenFreeMap is unmetered; CARTO basemaps are
- * free for reasonable use. All three send Access-Control-Allow-Origin: *.
+ * Free, key-less vector styles, each paired with a dark counterpart.
+ *
+ * The pairing is the point: a basemap is a choice of cartography, not a choice
+ * of brightness, so picking Minimal and then turning the lights off should give
+ * you Minimal in the dark rather than a white map under dark chrome. That is
+ * also why there is no longer a standalone "Dark" entry or a "Match theme" one
+ * — every style matches the theme now, so both had become the same thing said
+ * twice. resolveMapStyle migrates those two stored ids.
+ *
+ * OpenFreeMap is unmetered; CARTO basemaps are free for reasonable use. All
+ * send Access-Control-Allow-Origin: *.
  */
 export const MAP_STYLES: MapStyleOption[] = [
-  // Resolved against the UI theme before it reaches NavMap; see AUTO_MAP_STYLE.
-  { id: 'auto', label: 'Match theme', url: '', dark: false },
-  { id: 'liberty', label: 'Streets', url: 'https://tiles.openfreemap.org/styles/liberty', dark: false },
-  { id: 'dark', label: 'Dark', url: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json', dark: true },
-  { id: 'positron', label: 'Minimal', url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json', dark: false },
-  { id: 'voyager', label: 'Voyager', url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json', dark: false },
-  { id: 'bright', label: 'Bright', url: 'https://tiles.openfreemap.org/styles/bright', dark: false },
-  // Built at runtime from the Map Tiles API, so no URL and no use without a
-  // key of your own. resolveMapStyle turns these into a style object.
-  { id: 'google-roadmap', label: 'Google', url: '', dark: false, needsGoogleKey: true },
-  { id: 'google-satellite', label: 'Google satellite', url: '', dark: true, needsGoogleKey: true }
+  {
+    id: 'liberty',
+    label: 'Streets',
+    url: 'https://tiles.openfreemap.org/styles/liberty',
+    darkUrl: 'https://tiles.openfreemap.org/styles/dark'
+  },
+  {
+    // Positron and Dark Matter are drawn as a matched pair by CARTO, so this
+    // one swaps without any change in character.
+    id: 'positron',
+    label: 'Minimal',
+    url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
+    darkUrl: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
+  },
+  {
+    // Voyager has no dark twin. Fiord is the closest in spirit — still
+    // coloured rather than monochrome — which keeps it distinct from Minimal.
+    id: 'voyager',
+    label: 'Voyager',
+    url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
+    darkUrl: 'https://tiles.openfreemap.org/styles/fiord'
+  },
+  {
+    // OpenFreeMap ships one dark style, so this lands on the same map as
+    // Streets does. Honest duplication: Bright and Liberty are near-identical
+    // in daylight too, and the alternative is a light map in dark mode.
+    id: 'bright',
+    label: 'Bright',
+    url: 'https://tiles.openfreemap.org/styles/bright',
+    darkUrl: 'https://tiles.openfreemap.org/styles/dark'
+  },
+  // Built at runtime from the Map Tiles API, so no URLs and no use without a
+  // key of your own. resolveMapStyle turns these into a style object; the dark
+  // roadmap comes from a styler passed to createSession.
+  { id: 'google-roadmap', label: 'Google', url: '', darkUrl: '', needsGoogleKey: true },
+  // Imagery has no light or dark version — it is a photograph either way.
+  { id: 'google-satellite', label: 'Google satellite', url: '', darkUrl: '', needsGoogleKey: true }
 ];
 
-/** 'auto' heads the list but carries no URL, so it can't be the fallback. */
-const FALLBACK_MAP_STYLE = MAP_STYLES.find((style) => style.id === 'liberty') ?? MAP_STYLES[1];
+const FALLBACK_MAP_STYLE = MAP_STYLES[0];
+
+/**
+ * Ids that used to exist. 'auto' followed the theme, which every style now
+ * does; 'dark' was Dark Matter, whose light twin is Minimal. Mapping them keeps
+ * a stored preference working instead of silently falling back to Streets.
+ */
+const LEGACY_STYLE_IDS: Record<string, string> = {
+  auto: 'liberty',
+  dark: 'positron'
+};
+
+export function canonicalMapStyleId(styleId: string): string {
+  return LEGACY_STYLE_IDS[styleId] ?? styleId;
+}
 
 /**
  * Terrarium-encoded elevation tiles from the AWS Open Data registry
@@ -179,22 +228,22 @@ export function saveEndpoints(next: Partial<Endpoints>): Endpoints {
 }
 
 /**
- * Style URL for the selected basemap.
+ * Style URL for the selected basemap at a given theme.
  *
  * Any URL that isn't one of the built-ins is treated as a custom basemap and
  * overrides the picker — otherwise NEXT_PUBLIC_MAP_STYLE_URL and the Settings
  * field would be stored, shown, and then silently ignored by the style
  * switcher, which is exactly what self-hosters point at their own tiles with.
+ * A custom URL is one map, so it is used in both themes.
  */
-export function resolveMapStyleUrl(styleId: string): string {
+export function resolveMapStyleUrl(styleId: string, dark = false): string {
   const { mapStyleUrl } = getEndpoints();
-  if (mapStyleUrl && !MAP_STYLES.some((style) => style.url === mapStyleUrl)) {
-    return mapStyleUrl;
-  }
-  const match = MAP_STYLES.find((style) => style.id === styleId);
-  // 'auto' carries no URL of its own — callers are expected to have swapped it
-  // for a concrete id already. Falling through to Streets beats a blank map.
-  return match?.url || FALLBACK_MAP_STYLE.url;
+  const isBuiltIn = MAP_STYLES.some((style) => style.url === mapStyleUrl || style.darkUrl === mapStyleUrl);
+  if (mapStyleUrl && !isBuiltIn) return mapStyleUrl;
+
+  const match = MAP_STYLES.find((style) => style.id === canonicalMapStyleId(styleId));
+  const chosen = match ?? FALLBACK_MAP_STYLE;
+  return (dark ? chosen.darkUrl : chosen.url) || chosen.url || FALLBACK_MAP_STYLE.url;
 }
 
 /**
@@ -204,26 +253,27 @@ export function resolveMapStyleUrl(styleId: string): string {
  * Falls back when a Google basemap is selected without a key — better a working
  * map than a blank one, and the picker hides those entries anyway.
  */
-export function resolveMapStyle(styleId: string): string | StyleSpecification {
-  const match = MAP_STYLES.find((style) => style.id === styleId);
+export function resolveMapStyle(styleId: string, dark = false): string | StyleSpecification {
+  const id = canonicalMapStyleId(styleId);
+  const match = MAP_STYLES.find((style) => style.id === id);
+
   if (match?.needsGoogleKey) {
     const key = getGoogleMapsKey();
-    if (!key) return resolveMapStyleUrl(FALLBACK_MAP_STYLE.id);
-    return googleMapStyle(styleId === 'google-satellite' ? 'satellite' : 'roadmap', key);
+    if (!key) return resolveMapStyleUrl(FALLBACK_MAP_STYLE.id, dark);
+    const mapType = id === 'google-satellite' ? 'satellite' : 'roadmap';
+    // Imagery is a photograph; only the roadmap has a dark rendering.
+    return googleMapStyle(mapType, key, dark && mapType === 'roadmap');
   }
-  return resolveMapStyleUrl(styleId);
+
+  return resolveMapStyleUrl(id, dark);
 }
 
 /** The Google map type behind a style id, or null if it is not a Google one. */
 export function googleMapTypeFor(styleId: string): GoogleMapType | null {
-  if (styleId === 'google-roadmap') return 'roadmap';
-  if (styleId === 'google-satellite') return 'satellite';
+  const id = canonicalMapStyleId(styleId);
+  if (id === 'google-roadmap') return 'roadmap';
+  if (id === 'google-satellite') return 'satellite';
   return null;
-}
-
-/** Which concrete basemap 'auto' means at a given UI theme. */
-export function autoMapStyleId(theme: 'dark' | 'light'): string {
-  return theme === 'dark' ? 'dark' : 'liberty';
 }
 
 export function resetEndpoints(): Endpoints {

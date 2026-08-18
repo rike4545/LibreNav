@@ -62,8 +62,8 @@ export const defaultPreferences: Preferences = {
   // Follow the locale's convention rather than assuming metric.
   imperial: typeof navigator !== 'undefined' && /^en-(US|GB|MM|LR)/i.test(navigator.language ?? ''),
   voiceGuidance: true,
-  // New installs follow the theme; anyone with a stored choice keeps it.
-  mapStyleId: 'auto',
+  // Every style follows the theme now, so this is only a choice of cartography.
+  mapStyleId: 'liberty',
   showChargers: true,
   minChargerKw: 0,
   chargerConnector: null,

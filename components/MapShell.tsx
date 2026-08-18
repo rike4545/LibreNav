@@ -33,7 +33,7 @@ import { SearchPanel } from '@/components/SearchPanel';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { SpeedPanel } from '@/components/SpeedPanel';
 import { useResolvedTheme } from '@/components/ThemeSync';
-import { appEnv, autoMapStyleId, availableMapStyles } from '@/lib/config';
+import { appEnv, availableMapStyles, canonicalMapStyleId } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
 import { boundsOf, boxAround, haversineMeters, pathAhead } from '@/lib/geometry';
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
@@ -151,10 +151,11 @@ export function MapShell() {
 
   const [preferences, setPreferences] = useState<Preferences>(() => getPreferences());
   const resolvedTheme = useResolvedTheme();
-  // 'auto' is a UI-level id with no tiles behind it; NavMap only ever sees a
-  // real basemap, which also means a theme flip reloads the style for free.
-  const mapStyleId =
-    preferences.mapStyleId === 'auto' ? autoMapStyleId(resolvedTheme) : preferences.mapStyleId;
+  // Every basemap now has a light and a dark rendering, so the id says which
+  // cartography and the theme says which of the two. Passing both down means a
+  // theme flip reloads the style without the id having to change.
+  const mapStyleId = canonicalMapStyleId(preferences.mapStyleId);
+  const mapStyleDark = resolvedTheme === 'dark';
   const [vehicle, setVehicle] = useState<VehicleProfile>(() => getVehicle());
   const [options, setOptions] = useState<RouteOptions>(() => getRouteOptions());
   const [saved, setSaved] = useState<SavedPlace[]>([]);
@@ -1080,12 +1081,10 @@ export function MapShell() {
   }
 
   function updatePreferences(next: Preferences) {
-    // A theme change used to rewrite mapStyleId to 'dark' or 'liberty' so the
-    // basemap followed the chrome. The 'auto' style does that now, and doing
-    // both is worse than either: it overwrote 'auto' with a fixed id — killing
-    // the very behaviour it was imitating — and it also overrode a deliberate
-    // pick, so choosing Voyager or Google and then flipping theme threw the
-    // choice away. Explicit choices stand; 'auto' is how you opt into following.
+    // A theme change used to rewrite mapStyleId so the basemap followed the
+    // chrome, which threw away a deliberate pick. It no longer needs to: the id
+    // names the cartography and the theme picks that style's light or dark
+    // rendering, so the two are independent.
     setPreferences(savePreferences(next));
     if (!next.voiceGuidance) stopSpeaking();
   }
@@ -1094,7 +1093,7 @@ export function MapShell() {
     // Only what the picker offers: the Google entries are absent until a key is
     // saved, so the button must not be able to land on one either.
     const styles = availableMapStyles();
-    const index = styles.findIndex((style) => style.id === preferences.mapStyleId);
+    const index = styles.findIndex((style) => style.id === mapStyleId);
     const next = styles[(index + 1) % styles.length];
     updatePreferences({ ...preferences, mapStyleId: next.id });
     showToast(`Map style: ${next.label}`);
@@ -1218,6 +1217,7 @@ export function MapShell() {
       <NavMap
         center={mapCenter}
         styleId={mapStyleId}
+        styleDark={mapStyleDark}
         waypoints={waypoints}
         route={route}
         activeAlternativeId={activeAlternativeId}

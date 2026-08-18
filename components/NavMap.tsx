@@ -15,6 +15,8 @@ maplibregl.addProtocol(GOOGLE_PROTOCOL, googleTileProtocol);
 type Props = {
   center: Coordinate;
   styleId: string;
+  /** Whether to load the style's dark rendering. */
+  styleDark: boolean;
   waypoints: Waypoint[];
   route: RouteResponse | null;
   activeAlternativeId: string | null;
@@ -52,6 +54,9 @@ const SOURCES = {
 } as const;
 
 const TERRAIN_SOURCE = 'terrain-dem';
+
+/** Identity of a loaded basemap: which cartography, and which of its two renderings. */
+const styleKey = (id: string, dark: boolean) => `${id}:${dark ? 'dark' : 'light'}`;
 
 const emptyCollection = (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
@@ -94,6 +99,7 @@ function raiseOverlays(map: Map) {
 export function NavMap({
   center,
   styleId,
+  styleDark,
   waypoints,
   route,
   activeAlternativeId,
@@ -126,6 +132,7 @@ export function NavMap({
   const appliedStyleRef = useRef<string | null>(null);
   /** Latest requested style, readable from the mount effect's closure. */
   const styleIdRef = useRef(styleId);
+  const styleDarkRef = useRef(styleDark);
 
   // Handlers land in map event callbacks that are registered once; refs keep
   // those callbacks pointing at the current props without re-binding listeners.
@@ -441,14 +448,14 @@ export function NavMap({
 
     const map = new maplibregl.Map({
       container: containerRef.current,
-      style: resolveMapStyle(styleId),
+      style: resolveMapStyle(styleId, styleDark),
       center: [center.lng, center.lat],
       zoom: appEnv.defaultZoom,
       attributionControl: false,
       maxPitch: 70
     });
     mapRef.current = map;
-    appliedStyleRef.current = styleId;
+    appliedStyleRef.current = styleKey(styleId, styleDark);
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
     map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
@@ -477,9 +484,9 @@ export function NavMap({
       // now rather than dropping it — that is how a theme flip during the first
       // load used to strand a dark basemap under a light UI. Recording it as
       // applied first is what stops the resulting styledata re-entering here.
-      if (appliedStyleRef.current !== styleIdRef.current) {
-        appliedStyleRef.current = styleIdRef.current;
-        map.setStyle(resolveMapStyle(styleIdRef.current), { diff: false });
+      if (appliedStyleRef.current !== styleKey(styleIdRef.current, styleDarkRef.current)) {
+        appliedStyleRef.current = styleKey(styleIdRef.current, styleDarkRef.current);
+        map.setStyle(resolveMapStyle(styleIdRef.current, styleDarkRef.current), { diff: false });
         return true;
       }
 
@@ -553,14 +560,20 @@ export function NavMap({
   /* --------------------------------------------------------- style swap */
   useEffect(() => {
     styleIdRef.current = styleId;
+    styleDarkRef.current = styleDark;
     const map = mapRef.current;
     // Before the first style parses, setStyle would be discarded; applyOverlays
-    // picks the change back up off styleIdRef once it is safe.
+    // picks the change back up off the refs once it is safe.
     if (!map || !styleReadyRef.current) return;
-    if (appliedStyleRef.current === styleId) return;
-    appliedStyleRef.current = styleId;
-    map.setStyle(resolveMapStyle(styleId), { diff: false });
-  }, [styleId]);
+
+    // Compare on the same key that gets stored. Comparing the bare id against a
+    // stored composite never matched, so this reloaded on every render pass —
+    // and a theme flip, which changes only the second half, never reloaded.
+    const wanted = styleKey(styleId, styleDark);
+    if (appliedStyleRef.current === wanted) return;
+    appliedStyleRef.current = wanted;
+    map.setStyle(resolveMapStyle(styleId, styleDark), { diff: false });
+  }, [styleId, styleDark]);
 
   /* --------------------------------------------- overlay data -> sources */
   useEffect(() => {
@@ -752,7 +765,8 @@ export function NavMap({
             west: bounds.getWest()
           },
           map.getZoom(),
-          controller.signal
+          controller.signal,
+          styleDark
         )
           .then(setGoogleCopyright)
           // A failed credit lookup must not blank the credit already shown.
@@ -767,7 +781,7 @@ export function NavMap({
       controller.abort();
       map.off('moveend', refresh);
     };
-  }, [googleMapType]);
+  }, [googleMapType, styleDark]);
 
   // Inline styles rather than utility classes: maplibre-gl.css sets
   // `.maplibregl-map { position: relative }` and loads after Tailwind, which
@@ -785,7 +799,9 @@ export function NavMap({
               18px trademark that has to come from Google's own CDN. */}
           <img
             src={
-              googleMapType === 'satellite'
+              // Imagery and the dark roadmap both want the white wordmark; the
+              // light roadmap wants the dark one.
+              googleMapType === 'satellite' || styleDark
                 ? 'https://maps.gstatic.com/mapfiles/api-3/images/google_white5.png'
                 : 'https://maps.gstatic.com/mapfiles/api-3/images/google4.png'
             }

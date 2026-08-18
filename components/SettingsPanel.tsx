@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { BatteryCharging, Coffee, Globe, History, KeyRound, Play, RotateCcw, Server, Volume2, X } from 'lucide-react';
-import { DEFAULT_ENDPOINTS, Endpoints, availableMapStyles, getEndpoints, getGoogleMapsKey, getLocalDataKey, resetEndpoints, saveEndpoints, saveGoogleMapsKey, saveLocalDataKey } from '@/lib/config';
+import { DEFAULT_ENDPOINTS, Endpoints, availableMapStyles, canonicalMapStyleId, getEndpoints, getGoogleMapsKey, getLocalDataKey, resetEndpoints, saveEndpoints, saveGoogleMapsKey, saveLocalDataKey } from '@/lib/config';
 import { resetGoogleSessions, verifyGoogleMapsKey } from '@/lib/services/googleTiles';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
 import { Preferences, ThemeChoice, TripRecord } from '@/lib/storage';
@@ -56,6 +56,10 @@ export function SettingsPanel({
   // Recomputed per render rather than memoised: saving a Google key has to make
   // those two styles appear in the picker straight away.
   const mapStyles = availableMapStyles();
+  // A preference stored under a removed id ('auto', 'dark') still loads the
+  // right map; compare canonically so its chip reads as selected too, instead
+  // of the picker showing nothing chosen.
+  const selectedStyleId = canonicalMapStyleId(preferences.mapStyleId);
 
   async function applyGoogleKey() {
     // Sessions are minted per key, so a cached one is worthless after a change.
@@ -173,7 +177,7 @@ export function SettingsPanel({
                   onClick={() => onPreferencesChange({ ...preferences, mapStyleId: style.id })}
                   className={cn(
                     'rounded-full border px-3 py-1.5 text-xs font-semibold transition',
-                    preferences.mapStyleId === style.id
+                    selectedStyleId === style.id
                       ? 'border-sky-400 bg-sky-500/25 text-fg'
                       : 'border-line bg-raised text-muted hover:bg-strong'
                   )}
@@ -470,7 +474,7 @@ export function SettingsPanel({
                 // Leaving a Google basemap selected with no key would strand a
                 // style the picker no longer offers, so step back to Streets.
                 if (preferences.mapStyleId.startsWith('google-')) {
-                  onPreferencesChange({ ...preferences, mapStyleId: 'auto' });
+                  onPreferencesChange({ ...preferences, mapStyleId: 'liberty' });
                 }
                 setGoogleStatus(null);
                 setGoogleSaved(true);

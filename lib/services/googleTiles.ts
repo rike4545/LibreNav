@@ -30,19 +30,52 @@ const SESSION_KEY_PREFIX = 'librenav.googleSession.';
  */
 const GLYPHS_URL = 'https://fonts.openmaptiles.org/{fontstack}/{range}.pbf';
 
+/**
+ * Google's own styler format, roadmap only — the Map Tiles API accepts the
+ * same array the Maps JS API takes. This is the standard night palette: dark
+ * ground, lighter roads, muted labels, so it sits under the app's dark chrome
+ * the way Dark Matter does.
+ */
+const DARK_ROADMAP_STYLES = [
+  { elementType: 'geometry', stylers: [{ color: '#212121' }] },
+  { elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#212121' }] },
+  { featureType: 'administrative', elementType: 'geometry', stylers: [{ color: '#757575' }] },
+  { featureType: 'administrative.country', elementType: 'labels.text.fill', stylers: [{ color: '#9e9e9e' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#bdbdbd' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#181818' }] },
+  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#2c2c2c' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+  { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#373737' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#3c3c3c' }] },
+  { featureType: 'road.highway.controlled_access', elementType: 'geometry', stylers: [{ color: '#4e4e4e' }] },
+  { featureType: 'road.local', elementType: 'labels.text.fill', stylers: [{ color: '#616161' }] },
+  { featureType: 'transit', elementType: 'labels.text.fill', stylers: [{ color: '#757575' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#000000' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#3d3d3d' }] }
+];
+
 type CachedSession = { token: string; expiresAtMs: number };
+
+/** Light and dark roadmaps are separate sessions, so they cache separately. */
+function variantOf(mapType: GoogleMapType, dark: boolean): string {
+  return dark ? `${mapType}-dark` : mapType;
+}
 
 /** One promise per map type, so parallel first tiles mint a single session. */
 const pending = new Map<string, Promise<string>>();
 
-function cacheKey(mapType: GoogleMapType): string {
-  return `${SESSION_KEY_PREFIX}${mapType}`;
+function cacheKey(variant: string): string {
+  return `${SESSION_KEY_PREFIX}${variant}`;
 }
 
-function readCachedSession(mapType: GoogleMapType): string | null {
+function readCachedSession(variant: string): string | null {
   if (typeof window === 'undefined') return null;
   try {
-    const raw = window.localStorage.getItem(cacheKey(mapType));
+    const raw = window.localStorage.getItem(cacheKey(variant));
     if (!raw) return null;
     const cached = JSON.parse(raw) as CachedSession;
     if (!cached.token || cached.expiresAtMs - SESSION_SAFETY_MARGIN_MS < Date.now()) return null;
@@ -52,17 +85,17 @@ function readCachedSession(mapType: GoogleMapType): string | null {
   }
 }
 
-function writeCachedSession(mapType: GoogleMapType, token: string, expirySeconds: number) {
+function writeCachedSession(variant: string, token: string, expirySeconds: number) {
   if (typeof window === 'undefined') return;
   try {
     const record: CachedSession = { token, expiresAtMs: Number(expirySeconds) * 1000 };
-    window.localStorage.setItem(cacheKey(mapType), JSON.stringify(record));
+    window.localStorage.setItem(cacheKey(variant), JSON.stringify(record));
   } catch {
     // A full or blocked store just means a new session next reload.
   }
 }
 
-async function createSession(mapType: GoogleMapType, key: string): Promise<string> {
+async function createSession(mapType: GoogleMapType, key: string, dark = false): Promise<string> {
   const response = await fetch(`https://tile.googleapis.com/v1/createSession?key=${encodeURIComponent(key)}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -72,7 +105,9 @@ async function createSession(mapType: GoogleMapType, key: string): Promise<strin
       region: 'US',
       // Retina tiles; still one 256pt tile as far as the renderer is concerned.
       scale: 'scaleFactor2x',
-      highDpi: true
+      highDpi: true,
+      // Stylers are roadmap-only; imagery has nothing to restyle.
+      ...(dark && mapType === 'roadmap' ? { styles: DARK_ROADMAP_STYLES } : {})
     })
   });
 
@@ -83,19 +118,20 @@ async function createSession(mapType: GoogleMapType, key: string): Promise<strin
   const result = (await response.json()) as { session?: string; expiry?: string };
   if (!result.session) throw new Error('Google session response carried no token.');
 
-  writeCachedSession(mapType, result.session, Number(result.expiry ?? 0));
+  writeCachedSession(variantOf(mapType, dark), result.session, Number(result.expiry ?? 0));
   return result.session;
 }
 
-async function sessionToken(mapType: GoogleMapType, key: string): Promise<string> {
-  const cached = readCachedSession(mapType);
+async function sessionToken(mapType: GoogleMapType, key: string, dark = false): Promise<string> {
+  const variant = variantOf(mapType, dark);
+  const cached = readCachedSession(variant);
   if (cached) return cached;
 
-  const inFlight = pending.get(mapType);
+  const inFlight = pending.get(variant);
   if (inFlight) return inFlight;
 
-  const request = createSession(mapType, key).finally(() => pending.delete(mapType));
-  pending.set(mapType, request);
+  const request = createSession(mapType, key, dark).finally(() => pending.delete(variant));
+  pending.set(variant, request);
   return request;
 }
 
@@ -110,9 +146,10 @@ export async function googleTileProtocol(
   const url = new URL(params.url.replace(`${GOOGLE_PROTOCOL}://`, 'https://'));
   const mapType = url.hostname as GoogleMapType;
   const key = url.searchParams.get('key') ?? '';
+  const dark = url.searchParams.get('dark') === '1';
   if (!key) throw new Error('No Google Maps key configured.');
 
-  const session = await sessionToken(mapType, key);
+  const session = await sessionToken(mapType, key, dark);
   const tileUrl =
     `https://tile.googleapis.com/v1/2dtiles${url.pathname}` +
     `?session=${encodeURIComponent(session)}&key=${encodeURIComponent(key)}`;
@@ -123,14 +160,16 @@ export async function googleTileProtocol(
 }
 
 /** A complete MapLibre style backed by Google tiles. Synchronous by design. */
-export function googleMapStyle(mapType: GoogleMapType, key: string): StyleSpecification {
+export function googleMapStyle(mapType: GoogleMapType, key: string, dark = false): StyleSpecification {
   return {
     version: 8,
     glyphs: GLYPHS_URL,
     sources: {
       'google-basemap': {
         type: 'raster',
-        tiles: [`${GOOGLE_PROTOCOL}://${mapType}/{z}/{x}/{y}?key=${encodeURIComponent(key)}`],
+        tiles: [
+          `${GOOGLE_PROTOCOL}://${mapType}/{z}/{x}/{y}?key=${encodeURIComponent(key)}${dark ? '&dark=1' : ''}`
+        ],
         tileSize: 256,
         maxzoom: 19
         // No `attribution` here on purpose: Google requires the live copyright
@@ -153,9 +192,10 @@ export async function fetchGoogleCopyright(
   key: string,
   bounds: { north: number; south: number; east: number; west: number },
   zoom: number,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  dark = false
 ): Promise<string> {
-  const session = await sessionToken(mapType, key);
+  const session = await sessionToken(mapType, key, dark);
   const query = new URLSearchParams({
     session,
     key,
@@ -194,9 +234,9 @@ export async function verifyGoogleMapsKey(key: string): Promise<{ ok: boolean; m
 export function resetGoogleSessions() {
   pending.clear();
   if (typeof window === 'undefined') return;
-  for (const mapType of ['roadmap', 'satellite'] as GoogleMapType[]) {
+  for (const variant of ['roadmap', 'roadmap-dark', 'satellite', 'satellite-dark']) {
     try {
-      window.localStorage.removeItem(cacheKey(mapType));
+      window.localStorage.removeItem(cacheKey(variant));
     } catch {
       // Nothing to do; a stale session just fails once and is re-minted.
     }
