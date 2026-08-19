@@ -96,6 +96,12 @@ body {
 :root {
   --safe-w: calc(100dvw - env(safe-area-inset-left) - env(safe-area-inset-right));
   --safe-h: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  /*
+   * Where map chrome — scale bar, credit, zoom buttons — sits above the bottom
+   * sheet. The collapsed sheet stands 58px off the bottom, so this clears it by
+   * about 14px and rises with the home indicator.
+   */
+  --map-chrome-bottom: calc(4.5rem + env(safe-area-inset-bottom));
 }
 
 /*
@@ -161,17 +167,19 @@ body {
  * `.maplibregl-ctrl.maplibregl-ctrl-attrib`.
  */
 
-/* Clear of the bottom sheet, and of the home indicator below it. */
+/*
+ * Clear of the bottom sheet, and of the home indicator below it.
+ *
+ * The collapsed sheet is 50px tall plus its own safe-area padding — 58px off
+ * the bottom, and the same on a phone as on a desktop. The old 13rem/9rem
+ * offsets were guesses at that height and overshot it by 160px and 86px, which
+ * left the credit and the zoom buttons stranded in the middle of the map
+ * instead of sitting against its edge. One offset covers both now, with enough
+ * margin to read as deliberate rather than touching.
+ */
 .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-left,
 .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-right {
-  bottom: calc(13rem + env(safe-area-inset-bottom));
-}
-
-@media (max-width: 640px) {
-  .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-left,
-  .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-right {
-    bottom: calc(9rem + env(safe-area-inset-bottom));
-  }
+  bottom: var(--map-chrome-bottom);
 }
 
 /* Landscape on a notched phone puts the whole side bezel over these corners. */
@@ -206,12 +214,19 @@ body {
  * it slides under the zoom buttons and clips "OpenStreetMap" against the
  * bezel. Stop it short of that corner and let it wrap — the credit is a
  * licence term, so it has to stay legible rather than just fit.
+ *
+ * Narrow screens only. MapLibre sizes this corner to 372px whatever the
+ * viewport, so capping it unconditionally wrapped the credit onto two lines
+ * even on a desktop with a thousand pixels to spare, where the zoom buttons
+ * are nowhere near it.
  */
-.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib.maplibregl-compact-show {
-  /* MapLibre re-declares content-box over the global reset, and it carries
-     36px of padding for the ⓘ — so without this the cap is 36px short. */
-  box-sizing: border-box;
-  max-width: calc(100% - 3.5rem);
+@media (max-width: 480px) {
+  .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib.maplibregl-compact-show {
+    /* MapLibre re-declares content-box over the global reset, and it carries
+       36px of padding for the ⓘ — so without this the cap is 36px short. */
+    box-sizing: border-box;
+    max-width: calc(100% - 3.5rem);
+  }
 }
 
 .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib-inner {
@@ -255,7 +270,7 @@ body {
 .google-credit {
   position: absolute;
   right: 0.5rem;
-  bottom: calc(13rem + env(safe-area-inset-bottom));
+  bottom: var(--map-chrome-bottom);
   z-index: 1;
   display: flex;
   align-items: center;
@@ -274,12 +289,6 @@ body {
   height: 18px;
   width: auto;
   flex-shrink: 0;
-}
-
-@media (max-width: 640px) {
-  .google-credit {
-    bottom: calc(9rem + env(safe-area-inset-bottom));
-  }
 }
 
 /* Trip stop pins */
