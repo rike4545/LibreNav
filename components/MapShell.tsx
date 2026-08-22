@@ -120,6 +120,9 @@ const MAX_CHARGER_RETRIES = 3;
  * minutes at 110 km/h), short enough that the box stays a corridor rather than
  * half a country.
  */
+/** How far the grip has to travel before a drag counts as a decision. */
+const SHEET_DRAG_THRESHOLD = 56;
+
 const TRAFFIC_LOOKAHEAD_KM = 40;
 
 /** Distance driven before the traffic box is moved up the route. */
@@ -234,6 +237,15 @@ export function MapShell() {
   // Start collapsed so the map is unobstructed on open; the search field
   // stays visible, everything else is one tap away.
   const [panelOpen, setPanelOpen] = useState(false);
+  /** Finger offset while the sheet is being dragged, and whether it still is. */
+  const [sheetDrag, setSheetDrag] = useState({ y: 0, active: false });
+  const sheetDragRef = useRef<{ startY: number; moved: boolean } | null>(null);
+  /**
+   * A click always follows pointerup, including the one that ends a drag.
+   * Without this the drag decides, then the click immediately undoes it — so a
+   * real drag arms this and the click that trails it spends it.
+   */
+  const suppressGripClickRef = useRef(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [layersOpen, setLayersOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -263,6 +275,17 @@ export function MapShell() {
   }, []);
 
   useEffect(() => () => void releaseWakeLock(), []);
+
+  // Escape minimises the sheet, matching the Layers sheet and the usual
+  // expectation that a keyboard can dismiss whatever is covering the page.
+  useEffect(() => {
+    if (!panelOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setPanelOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [panelOpen]);
 
   useEffect(() => configureVoice(voiceSettings), [voiceSettings]);
 
@@ -1120,6 +1143,49 @@ export function MapShell() {
     if (!next.voiceGuidance) stopSpeaking();
   }
 
+  /* ------------------------------------------------------- sheet gestures */
+  /**
+   * Drag the grip to open or minimise the sheet.
+   *
+   * Only the direction that can actually change something follows the finger:
+   * dragging up on an open sheet, or down on a minimised one, would promise a
+   * state that does not exist. `moved` is what stops the click that follows a
+   * real drag from immediately toggling back.
+   */
+  function onGripDown(event: React.PointerEvent<HTMLButtonElement>) {
+    sheetDragRef.current = { startY: event.clientY, moved: false };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setSheetDrag({ y: 0, active: true });
+  }
+
+  function onGripMove(event: React.PointerEvent<HTMLButtonElement>) {
+    const drag = sheetDragRef.current;
+    if (!drag) return;
+    const dy = event.clientY - drag.startY;
+    if (Math.abs(dy) > 4) drag.moved = true;
+    setSheetDrag({ y: panelOpen ? Math.max(0, dy) : Math.min(0, dy), active: true });
+  }
+
+  function onGripUp(event: React.PointerEvent<HTMLButtonElement>) {
+    const drag = sheetDragRef.current;
+    if (!drag) return;
+    sheetDragRef.current = null;
+    suppressGripClickRef.current = drag.moved;
+    const dy = event.clientY - drag.startY;
+    if (panelOpen && dy > SHEET_DRAG_THRESHOLD) setPanelOpen(false);
+    else if (!panelOpen && dy < -SHEET_DRAG_THRESHOLD) setPanelOpen(true);
+    setSheetDrag({ y: 0, active: false });
+  }
+
+  function onGripClick() {
+    // A drag has already decided; this is only a tap if nothing moved.
+    if (suppressGripClickRef.current) {
+      suppressGripClickRef.current = false;
+      return;
+    }
+    setPanelOpen((open) => !open);
+  }
+
   function chooseMapStyle(id: string) {
     updatePreferences({ ...preferences, mapStyleId: id });
     setLayersOpen(false);
@@ -1288,6 +1354,8 @@ export function MapShell() {
           }
           onAlternativeSelect={(id) => setActiveAlternativeId(id === 'main' ? null : id)}
           onMapLongPress={handleLongPress}
+          // A tap on bare map is the other way to put the sheet away.
+          onMapPress={() => setPanelOpen(false)}
           onAttributionChange={setCredit}
         />
       ) : null}
@@ -1501,7 +1569,31 @@ export function MapShell() {
 
       {!navActive && !selectedCharger && !reportOpen ? (
         <div className="safe-x absolute inset-x-0 bottom-[var(--map-floor)] z-20">
-          <div className="sheet-max mx-auto w-[min(60rem,100%)] rounded-[1.75rem] border border-line bg-surface shadow-panel">
+          <div
+            className="sheet-max mx-auto w-[min(60rem,100%)] rounded-[1.75rem] border border-line bg-surface shadow-panel"
+            style={{
+              transform: sheetDrag.y ? `translateY(${sheetDrag.y}px)` : undefined,
+              // No transition mid-drag or the sheet lags the finger; the snap
+              // back or through only wants one on release.
+              transition: sheetDrag.active ? 'none' : 'transform 220ms cubic-bezier(0.2, 0, 0, 1)'
+            }}
+          >
+            <button
+              type="button"
+              onPointerDown={onGripDown}
+              onPointerMove={onGripMove}
+              onPointerUp={onGripUp}
+              onPointerCancel={onGripUp}
+              onClick={onGripClick}
+              aria-label={panelOpen ? 'Minimise search' : 'Expand search'}
+              aria-expanded={panelOpen}
+              // touch-none keeps the browser from claiming the gesture as a
+              // page scroll before the pointer handlers ever see it.
+              className="group flex shrink-0 touch-none justify-center py-2.5"
+            >
+              <span className="h-1 w-9 rounded-full bg-line transition group-hover:bg-subtle" />
+            </button>
+
             {/* One surface: search, discovery, and the trip all live here, so
                 there is no separate "where to?" prompt competing with it. */}
             <SearchPanel

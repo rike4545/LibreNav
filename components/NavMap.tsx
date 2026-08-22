@@ -41,6 +41,8 @@ type Props = {
   onPlaceSelect: (place: Place) => void;
   onAlternativeSelect: (id: string) => void;
   onMapLongPress: (point: Coordinate) => void;
+  /** A tap on the map itself, not on a charger, place or route. */
+  onMapPress: () => void;
   /**
    * Credit owed for the basemap on screen. Lifted out rather than drawn here
    * because it belongs under the search bar with the rest of the app's chrome,
@@ -61,6 +63,9 @@ const SOURCES = {
 } as const;
 
 const TERRAIN_SOURCE = 'terrain-dem';
+
+/** What a tap can land on, so a tap on bare map can be told from one that hits something. */
+const TAPPABLE_LAYERS = ['chargers-cluster', 'chargers-point', 'places-point', 'alternatives-hit', 'reports-point', 'alerts-point'];
 
 /**
  * Pitch the camera rests at with terrain on, outside navigation.
@@ -203,6 +208,7 @@ export function NavMap({
   onPlaceSelect,
   onAlternativeSelect,
   onMapLongPress,
+  onMapPress,
   onAttributionChange
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -226,7 +232,7 @@ export function NavMap({
 
   // Handlers land in map event callbacks that are registered once; refs keep
   // those callbacks pointing at the current props without re-binding listeners.
-  const handlersRef = useRef({ onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange, onAttributionChange });
+  const handlersRef = useRef({ onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onMapPress, onCenterChange, onAttributionChange });
   const dataRef = useRef({ route, activeAlternativeId, chargers, places, reports, alerts, jams });
 
   // Both were assigned during render, which React does not allow — a render
@@ -235,7 +241,7 @@ export function NavMap({
   // re-binding listeners" behaviour, and this effect is declared above every
   // effect that reads them so it commits first.
   useEffect(() => {
-    handlersRef.current = { onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange, onAttributionChange };
+    handlersRef.current = { onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onMapPress, onCenterChange, onAttributionChange };
     dataRef.current = { route, activeAlternativeId, chargers, places, reports, alerts, jams };
   });
 
@@ -528,6 +534,21 @@ export function NavMap({
     map.on('click', 'alternatives-hit', (event) => {
       const id = event.features?.[0]?.properties?.id;
       if (typeof id === 'string') handlersRef.current.onAlternativeSelect(id);
+    });
+
+    /**
+     * A tap that lands on nothing.
+     *
+     * The layer handlers above own taps that hit something and fire for this
+     * event too, so this asks what is actually under the point rather than
+     * assuming, and stays quiet when the answer is a charger or a route.
+     * queryRenderedFeatures throws on a layer that is not installed yet, which
+     * is what the filter is for.
+     */
+    map.on('click', (event) => {
+      const layers = TAPPABLE_LAYERS.filter((id) => map.getLayer(id));
+      if (layers.length && map.queryRenderedFeatures(event.point, { layers }).length) return;
+      handlersRef.current.onMapPress();
     });
 
     for (const layer of ['chargers-cluster', 'chargers-point', 'places-point', 'alternatives-hit']) {
