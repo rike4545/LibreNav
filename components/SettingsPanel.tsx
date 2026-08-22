@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { BatteryCharging, Coffee, Globe, History, KeyRound, Play, RotateCcw, Server, Volume2, X } from 'lucide-react';
 import { DEFAULT_ENDPOINTS, Endpoints, availableMapStyles, canonicalMapStyleId, getEndpoints, getGoogleMapsKey, getLocalDataKey, resetEndpoints, saveEndpoints, saveGoogleMapsKey, saveLocalDataKey } from '@/lib/config';
 import { resetGoogleSessions, verifyGoogleMapsKey } from '@/lib/services/googleTiles';

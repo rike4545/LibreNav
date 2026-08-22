@@ -1133,6 +1133,12 @@ export function MapShell() {
   /** Door-to-door time including traffic — what both the ETA and "leave by" use. */
   const travelSeconds = (activeRouteSummary?.durationMin ?? 0) * 60 + (trafficDelay?.seconds ?? 0);
 
+  /** Latest delay, for effects that want the figure without the traffic tick. */
+  const trafficDelayRef = useRef(trafficDelay);
+  useEffect(() => {
+    trafficDelayRef.current = trafficDelay;
+  }, [trafficDelay]);
+
 
   /* ------------------------------------------- routing around bad jams */
   useEffect(() => {
@@ -1221,6 +1227,21 @@ export function MapShell() {
     // planned arrival are what actually change the answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [route, destination?.id, targetArrival]);
+
+  /* ------------------------------------------------ route out to the host */
+  /**
+   * `librenav:route` is declared in the embed protocol and routeEvent was
+   * written to build it, but nothing ever sent one — an embedder listening for
+   * a trip summary got silence. This is the send.
+   */
+  useEffect(() => {
+    if (!embed.embedded || !route) return;
+    emitToHost(routeEvent(route, trafficDelayRef.current?.seconds ?? 0, waypoints.length), embed);
+    // A freshly computed route is the event; the traffic poll re-runs several
+    // times a minute and re-announcing the same trip on every tick would be
+    // noise on the host's side. Reading the delay off a ref keeps it out of
+    // the deps while still sending the current figure.
+  }, [embed, route, waypoints.length]);
 
   return (
     <main className="relative h-[100dvh] w-full overflow-hidden bg-surface text-fg">

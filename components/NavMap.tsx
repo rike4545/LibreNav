@@ -62,6 +62,15 @@ const SOURCES = {
 
 const TERRAIN_SOURCE = 'terrain-dem';
 
+/**
+ * Pitch the camera rests at with terrain on, outside navigation.
+ *
+ * Relief is close to invisible looking straight down, so terrain that only
+ * sets terrain reads as having done nothing at all. Seeing it is the entire
+ * reason for switching it on.
+ */
+const TERRAIN_RESTING_PITCH = 45;
+
 /** Identity of a loaded basemap: which cartography, and which of its two renderings. */
 const styleKey = (id: string, dark: boolean) => `${id}:${dark ? 'dark' : 'light'}`;
 
@@ -155,6 +164,21 @@ function raiseOverlays(map: Map) {
   }
 }
 
+/**
+ * Switch terrain on or off, safely, from anywhere.
+ *
+ * `setTerrain` throws if the DEM is not in the current style, and a style swap
+ * takes every source with it — so "nothing to raise yet" has to be a no-op
+ * rather than an error. applyOverlays calls this again once the DEM is back,
+ * which is what carries the setting across a basemap change or a theme flip.
+ */
+function applyTerrain(map: Map, on: boolean) {
+  if (on && !map.getSource(TERRAIN_SOURCE)) return;
+  // exaggeration 1 is MapLibre's default and the honest one: this is a
+  // navigation map, not a relief poster.
+  map.setTerrain(on ? { source: TERRAIN_SOURCE, exaggeration: 1 } : null);
+}
+
 export function NavMap({
   center,
   styleId,
@@ -197,6 +221,8 @@ export function NavMap({
   /** Latest requested style, readable from the mount effect's closure. */
   const styleIdRef = useRef(styleId);
   const styleDarkRef = useRef(styleDark);
+  /** Same, for terrain: a style reload has to put it back by itself. */
+  const terrain3dRef = useRef(terrain3d);
 
   // Handlers land in map event callbacks that are registered once; refs keep
   // those callbacks pointing at the current props without re-binding listeners.
@@ -538,6 +564,12 @@ export function NavMap({
       style: resolveMapStyle(styleId, styleDark),
       center: [center.lng, center.lat],
       zoom: appEnv.defaultZoom,
+      // Terrain restored from a stored preference starts tilted rather than
+      // easing there: on mount this would be one of several camera calls in
+      // the same tick, and the ones that follow cancel the ease mid-flight.
+      // A toggle later on has no such competition and animates through the
+      // effect below.
+      pitch: terrain3dRef.current ? TERRAIN_RESTING_PITCH : 0,
       attributionControl: false,
       maxPitch: 70
     });
@@ -579,6 +611,7 @@ export function NavMap({
       }
 
       installLayers(map);
+      applyTerrain(map, terrain3dRef.current);
       raiseOverlays(map);
       syncOverlayData(map);
       return true;
@@ -688,6 +721,16 @@ export function NavMap({
     appliedStyleRef.current = wanted;
     map.setStyle(resolveMapStyle(styleId, styleDark), { diff: false });
   }, [styleId, styleDark]);
+
+  /* ------------------------------------------------------------- terrain */
+  useEffect(() => {
+    terrain3dRef.current = terrain3d;
+    const map = mapRef.current;
+    // Before the first style parses there is no DEM to point at. applyOverlays
+    // reads the setting back off the ref the moment there is one.
+    if (!map || !styleReadyRef.current) return;
+    applyTerrain(map, terrain3d);
+  }, [terrain3d]);
 
   /* --------------------------------------------- overlay data -> sources */
   useEffect(() => {
@@ -805,12 +848,24 @@ export function NavMap({
     });
   }, [navActive, snappedPosition, userPosition, courseDeg]);
 
-  // Flatten the camera when navigation stops.
+  /**
+   * Rest the camera when navigation stops — tilted if terrain is on.
+   *
+   * This owns pitch outside navigation, so it is also what has to tilt for
+   * terrain: flattening unconditionally here is what would make switching
+   * terrain on look like it did nothing.
+   *
+   * The padding reset is its own call on purpose. Handed `padding` and `pitch`
+   * together, MapLibre derives the camera from the padding and drops the pitch
+   * — silently, which is why the flatten that used to live here never actually
+   * flattened anything after a trip.
+   */
   useEffect(() => {
     const map = mapRef.current;
     if (!map || navActive) return;
-    map.easeTo({ pitch: 0, padding: { top: 0, bottom: 0, left: 0, right: 0 }, duration: 600 });
-  }, [navActive]);
+    map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+    map.easeTo({ pitch: terrain3d ? TERRAIN_RESTING_PITCH : 0, duration: 600 });
+  }, [navActive, terrain3d]);
 
   /* -------------------------------------------------- camera fit tokens */
   useEffect(() => {

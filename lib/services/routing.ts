@@ -2,7 +2,6 @@ import { getEndpoints } from '@/lib/config';
 import { decodePolyline6 } from '@/lib/geometry';
 import {
   Coordinate,
-  TravelMode,
   ManeuverKind,
   RouteAlternative,
   RouteLeg,
