@@ -1284,7 +1284,7 @@ export function MapShell() {
           onCenterChange={setMapCenter}
           onChargerSelect={setSelectedCharger}
           onPlaceSelect={(place) =>
-          setDestination({ id: place.id, name: place.name, label: place.address ?? '', coordinate: place.coordinate })
+            setDestination({ id: place.id, name: place.name, label: place.address ?? '', coordinate: place.coordinate })
           }
           onAlternativeSelect={(id) => setActiveAlternativeId(id === 'main' ? null : id)}
           onMapLongPress={handleLongPress}

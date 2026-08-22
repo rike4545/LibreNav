@@ -213,7 +213,7 @@ export function SettingsPanel({
             allLabel={chargerNetworks.length ? 'Any network' : 'No networks loaded yet'}
             onChange={(value) => onPreferencesChange({ ...preferences, chargerNetwork: value })}
           />
-          <p className="mt-1.5 text-[11px] leading-relaxed text-subtle">
+          <p className="mt-1.5 text-xs leading-relaxed text-subtle">
             Connector and network come from OpenStreetMap tags, which are often missing — filtering will hide chargers
             that simply have not been tagged.
           </p>
@@ -274,7 +274,7 @@ export function SettingsPanel({
                 <Play className="h-3.5 w-3.5" />
                 Test voice
               </button>
-              <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+              <p className="mt-2 text-xs leading-relaxed text-subtle">
                 Voices come from your device. The ones marked online need a connection — pick a local
                 voice if you drive where signal drops.
               </p>
@@ -337,7 +337,7 @@ export function SettingsPanel({
         <Section title="Service endpoints" icon={<Server className="h-4 w-4" />}>
           <p className="mb-3 text-xs leading-relaxed text-subtle">
             LibreNav ships pointed at the public OSM services. Point these at your own stack — the bundled{' '}
-            <code className="rounded bg-raised px-1 py-0.5 text-[11px]">docker-compose.yml</code> runs Valhalla and Photon
+            <code className="rounded bg-raised px-1 py-0.5 text-xs">docker-compose.yml</code> runs Valhalla and Photon
             locally. Browsers block http://localhost from an https page, so use the local dev server for a self-hosted setup.
           </p>
 
@@ -381,7 +381,7 @@ export function SettingsPanel({
             key mixes business results — ratings, opening status, addresses — into search alongside
             OpenStreetMap, which tends to be thin on shops and restaurants.
           </p>
-          <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-fg">
+          <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs leading-relaxed text-fg">
             Your key is stored only in this browser and is never sent anywhere except that API. It is
             deliberately not built into the app: LibreNav is a static site, so a key compiled in would
             be readable by every visitor and by anyone reading the repository.
@@ -437,7 +437,7 @@ export function SettingsPanel({
             </a>{' '}
             with the Map Tiles API enabled. Everything else in LibreNav keeps working without it.
           </p>
-          <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 text-[11px] leading-relaxed text-fg">
+          <p className="mb-3 rounded-xl border border-amber-400/30 bg-amber-500/10 p-2.5 text-xs leading-relaxed text-fg">
             Google bills this key per tile request, so restrict it to your own domain in Cloud Console
             — a static site cannot hide a key from anyone who opens the network tab. Stored only in
             this browser, like the key above.

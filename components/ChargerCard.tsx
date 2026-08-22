@@ -60,7 +60,7 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
 
       <div className="mt-3 flex flex-wrap gap-1.5">
         {charger.plugs.map((plug) => (
-          <span key={plug} className="rounded-md bg-raised px-2 py-1 text-[11px] font-medium text-muted">
+          <span key={plug} className="rounded-md bg-raised px-2 py-1 text-xs font-medium text-muted">
             {plug}
           </span>
         ))}
@@ -106,7 +106,7 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
         ) : null}
       </div>
 
-      <p className="mt-3 text-[11px] leading-relaxed text-subtle">
+      <p className="mt-3 text-xs leading-relaxed text-subtle">
         Details come from OpenStreetMap tags and can be incomplete or out of date. Live availability is not included.
       </p>
     </div>

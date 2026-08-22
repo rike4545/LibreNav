@@ -46,7 +46,7 @@ export function ReportSheet({ onReport, onClose }: Props) {
         ))}
       </div>
 
-      <p className="mt-3 text-[11px] leading-relaxed text-subtle">
+      <p className="mt-3 text-xs leading-relaxed text-subtle">
         Reports are saved in this browser only and expire after 24 hours. LibreNav has no server, so there is nothing to
         share them with other drivers.
       </p>

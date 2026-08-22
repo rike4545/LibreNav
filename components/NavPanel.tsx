@@ -144,7 +144,7 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
 function Stat({ label, value }: { label: string; value: string }) {
   return (
     <div className="text-center">
-      <div className="text-[10px] uppercase tracking-[0.18em] text-subtle">{label}</div>
+      <div className="text-xs uppercase tracking-[0.18em] text-subtle">{label}</div>
       <div className="text-base font-semibold tabular-nums text-fg">{value}</div>
     </div>
   );

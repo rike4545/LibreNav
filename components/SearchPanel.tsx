@@ -342,7 +342,7 @@ export function SearchPanel({
                   <div key={waypoint.id} className="flex items-center gap-2 rounded-xl bg-raised px-3 py-2">
                     <span
                       className={cn(
-                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-slate-950',
+                        'flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold text-slate-950',
                         index === 0 ? 'bg-emerald-400' : index === waypoints.length - 1 ? 'bg-sky-400' : 'bg-amber-400'
                       )}
                     >
@@ -472,7 +472,7 @@ export function SearchPanel({
               {loopBusy ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               {loopBusy ? 'Finding a loop…' : 'Generate loop'}
             </button>
-            <p className="mt-2 text-[11px] leading-relaxed text-subtle">
+            <p className="mt-2 text-xs leading-relaxed text-subtle">
               Distance is approximate — roads rarely allow an exact loop. Press again for a different one.
             </p>
             </>
@@ -580,7 +580,7 @@ function RoleButton({ icon, place, onClick }: { icon: ReactNode; place: SavedPla
       <span className="text-sky-300">{icon}</span>
       <span className="min-w-0">
         <span className="block truncate text-sm font-medium text-fg">{place.name}</span>
-        <span className="block text-[11px] uppercase tracking-wider text-subtle">{place.role}</span>
+        <span className="block text-xs uppercase tracking-wider text-subtle">{place.role}</span>
       </span>
     </button>
   );

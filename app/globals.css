@@ -19,7 +19,10 @@
   --strong: 44 56 82;
   --fg: 248 250 252;
   --muted: 191 202 219;
-  --subtle: 140 154 176;
+  /* Lightened to clear 4.5:1 on --strong, the darkest surface it lands on.
+     At 140 154 176 it measured 4.10 there, and this token carries most of the
+     app's smallest text. */
+  --subtle: 148 162 184;
   --line: 74 90 116;
   --page: 2 6 23;
   --accent-fg: 125 211 252;
@@ -33,7 +36,10 @@
   --strong: 226 232 240;
   --fg: 15 23 42;
   --muted: 51 65 85;
-  --subtle: 100 116 139;
+  /* Darkened for the same reason as its dark counterpart: at 100 116 139 this
+     measured 4.34:1 on --raised and 3.86:1 on --strong, both under AA, and it
+     is the colour the hints and captions are set in. */
+  --subtle: 89 105 128;
   --line: 187 198 212;
   --page: 226 232 240;
   --accent-fg: 2 105 161;
@@ -276,8 +282,10 @@ body {
     max(0.75rem, env(safe-area-inset-left));
   background: linear-gradient(to top, rgb(var(--page) / 0.85), rgb(var(--page) / 0));
   color: rgb(var(--subtle));
-  font-size: 10px;
-  line-height: 1.15;
+  /* 12px is the floor for chrome here: this is read at arm's length, in a car,
+     often in sunlight. */
+  font-size: 12px;
+  line-height: 1.25;
   text-align: center;
   /* A caption, not a target: taps belong to the map underneath it. */
   pointer-events: none;

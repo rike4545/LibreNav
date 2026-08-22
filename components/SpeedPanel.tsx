@@ -30,7 +30,7 @@ export function SpeedPanel({ speedKmh, limitKmh, imperial }: Props) {
           )}
         >
           <span className="text-2xl font-bold leading-none tabular-nums">{toDisplay(speedKmh)}</span>
-          <span className="mt-0.5 text-[10px] uppercase tracking-wider opacity-70">{unit}</span>
+          <span className="mt-0.5 text-xs uppercase tracking-wider opacity-70">{unit}</span>
         </div>
       ) : null}
 

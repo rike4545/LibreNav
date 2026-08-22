@@ -68,19 +68,22 @@ function OverlayToggle({ row, on, onToggle }: { row: OverlayRow; on: boolean; on
     >
       <span className={cn('shrink-0', on && !blocked ? 'text-sky-700 dark:text-sky-300' : 'text-subtle')}>{row.icon}</span>
       <span className="min-w-0 flex-1">
-        <span className="block text-xs font-semibold text-fg">{row.label}</span>
-        <span className="block text-[11px] leading-tight text-subtle">{row.blockedBy ?? row.hint}</span>
+        <span className="block text-sm font-semibold text-fg">{row.label}</span>
+        <span className="block text-xs leading-snug text-subtle">{row.blockedBy ?? row.hint}</span>
       </span>
+      {/* The off-state track is --line rather than --strong: against --strong
+          the knob is near-invisible in both themes, white-on-pale in light and
+          dark-on-dark in dark. The ring carries the edge either way. */}
       <span
         aria-hidden="true"
         className={cn(
           'relative h-5 w-9 shrink-0 rounded-full transition',
-          on && !blocked ? 'bg-sky-400' : 'bg-strong'
+          on && !blocked ? 'bg-sky-400' : 'bg-line'
         )}
       >
         <span
           className={cn(
-            'absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow transition-all',
+            'absolute top-0.5 h-4 w-4 rounded-full bg-surface shadow ring-1 ring-inset ring-line transition-all',
             on && !blocked ? 'left-[1.125rem]' : 'left-0.5'
           )}
         />
@@ -170,7 +173,7 @@ export function LayersSheet({
           </div>
 
           <div className="sheet-scroll border-t border-line p-4">
-            <h3 className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-subtle">Basemap</h3>
+            <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-subtle">Basemap</h3>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
               {styles.map((style) => {
                 const active = style.id === currentId;
@@ -198,15 +201,15 @@ export function LayersSheet({
                       ) : null}
                     </span>
                     <span className="flex flex-1 flex-col gap-0.5 bg-raised px-2.5 py-2">
-                      <span className="text-xs font-semibold text-fg">{style.label}</span>
-                      <span className="text-[11px] leading-tight text-subtle">{style.hint}</span>
+                      <span className="text-sm font-semibold text-fg">{style.label}</span>
+                      <span className="text-xs leading-snug text-subtle">{style.hint}</span>
                     </span>
                   </button>
                 );
               })}
             </div>
 
-            <h3 className="mb-2 mt-5 text-[11px] font-semibold uppercase tracking-[0.16em] text-subtle">Overlays</h3>
+            <h3 className="mb-2 mt-5 text-xs font-semibold uppercase tracking-[0.16em] text-subtle">Overlays</h3>
             <div className="grid gap-2 sm:grid-cols-2">
               {overlays.map((row) => (
                 <OverlayToggle
