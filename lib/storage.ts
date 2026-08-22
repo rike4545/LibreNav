@@ -40,6 +40,14 @@ export type Preferences = {
   chargerConnector: string | null;
   /** Only show chargers on this network/operator. null shows all. */
   chargerNetwork: string | null;
+  /**
+   * Draw live traffic, and fetch it at all.
+   *
+   * Off stops the polling rather than just hiding the layer: the endpoint is
+   * metered per call, so a hidden layer that kept requesting would spend the
+   * driver's quota on something they had switched off.
+   */
+  showTraffic: boolean;
   /** Render elevation as 3D terrain. */
   terrain3d: boolean;
   /** Warn on approach to speed cameras and reported hazards. */
@@ -68,6 +76,7 @@ export const defaultPreferences: Preferences = {
   minChargerKw: 0,
   chargerConnector: null,
   chargerNetwork: null,
+  showTraffic: true,
   terrain3d: false,
   alertsEnabled: true,
   showLoops: true

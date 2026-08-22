@@ -13,7 +13,6 @@ import {
   Circle,
   CloudSun,
   Coffee,
-  Mountain,
   Route as RouteIcon,
   Settings2,
   ShieldAlert,
@@ -550,9 +549,10 @@ export function MapShell() {
 
   /* --------------------------------------------------------- live traffic */
   useEffect(() => {
-    if (!trafficBounds || !hasLocalDataKey()) {
+    if (!trafficBounds || !hasLocalDataKey() || !preferences.showTraffic) {
       // Cleanup would clear on every bounds change, i.e. every pan, and the
-      // alerts would strobe. Only the loss of a key or bounds should empty it.
+      // alerts would strobe. Only the loss of a key, the bounds, or the
+      // setting itself should empty it.
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLiveAlerts([]);
       setJams([]);
@@ -597,7 +597,7 @@ export function MapShell() {
       document.removeEventListener('visibilitychange', onVisible);
       if (timer) clearInterval(timer);
     };
-  }, [trafficBounds]);
+  }, [trafficBounds, preferences.showTraffic]);
 
   /**
    * Everything worth warning about, placed along the route in order: OSM speed
@@ -1382,21 +1382,6 @@ export function MapShell() {
               </button>
               <button
                 type="button"
-                onClick={() => updatePreferences({ ...preferences, terrain3d: !preferences.terrain3d })}
-                aria-label="Toggle 3D terrain"
-                aria-pressed={preferences.terrain3d}
-                title="3D terrain"
-                className={cn(
-                  'rounded-full border p-2 shadow-panel transition sm:p-2.5',
-                  preferences.terrain3d
-                    ? 'border-emerald-400/60 bg-emerald-500/20 text-fg'
-                    : 'border-line bg-surface/95 text-muted hover:bg-strong'
-                )}
-              >
-                <Mountain className="h-4 w-4" />
-              </button>
-              <button
-                type="button"
                 onClick={() => setLayersOpen(true)}
                 aria-label="Map style"
                 aria-haspopup="dialog"
@@ -1484,7 +1469,10 @@ export function MapShell() {
           currentId={mapStyleId}
           dark={mapStyleDark}
           googleHidden={!hasGoogleMapsKey()}
+          preferences={preferences}
+          trafficAvailable={hasLocalDataKey()}
           onSelect={chooseMapStyle}
+          onPreferencesChange={updatePreferences}
           onOpenSettings={() => {
             setLayersOpen(false);
             setSettingsOpen(true);
