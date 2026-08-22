@@ -96,21 +96,44 @@ body {
 :root {
   --safe-w: calc(100dvw - env(safe-area-inset-left) - env(safe-area-inset-right));
   --safe-h: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+
+  /* One line of credit, its padding, and the home indicator underneath it. */
+  --credit-strip: calc(1.15rem + max(0.5rem, env(safe-area-inset-bottom)));
+
   /*
-   * Where map chrome — scale bar, credit, zoom buttons — sits above the bottom
-   * sheet. The collapsed sheet stands 58px off the bottom, so this clears it by
-   * about 14px and rises with the home indicator.
+   * How much of the screen the on-screen keyboard is covering. Set from JS —
+   * see lib/viewport.ts — because nothing in CSS knows: iOS keeps reporting
+   * the full screen through dvh with the keys up. The 0px default matters,
+   * since an undefined var would invalidate every calc() below it.
    */
-  --map-chrome-bottom: calc(4.5rem + env(safe-area-inset-bottom));
+  --kb: 0px;
+
+  /*
+   * The floor everything bottom-anchored stands on: above the map credit, and
+   * above the keyboard when one is up.
+   */
+  --map-floor: calc(var(--credit-strip) + var(--kb));
+
+  /*
+   * Where map chrome — scale bar, zoom buttons — sits above the bottom sheet.
+   * The collapsed sheet stands 50px tall, the same on a phone as on a desktop,
+   * so this clears it by about 14px.
+   */
+  --map-chrome-bottom: calc(var(--map-floor) + 4rem);
 }
 
 /*
  * Cap the bottom sheet so it can never run off the screen. It has to clear the
- * status bar above and the home indicator below, and scroll internally rather
+ * status bar above and the credit line below, and scroll internally rather
  * than pushing its own content out of view.
+ *
+ * Subtracting the keyboard is what keeps a sheet opened by tapping the search
+ * field from being taller than the screen the keys left behind — which is how
+ * the field being typed into ended up above the top of the display, with the
+ * category chips colliding with the clock.
  */
 .sheet-max {
-  max-height: calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 5rem);
+  max-height: calc(100dvh - var(--kb) - env(safe-area-inset-top) - var(--credit-strip) - 3.5rem);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -119,7 +142,10 @@ body {
 @media (max-width: 640px) {
   .sheet-max {
     /* The map is the product; the sheet should not bury it. */
-    max-height: min(62dvh, calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 5rem));
+    max-height: min(
+      62dvh,
+      calc(100dvh - var(--kb) - env(safe-area-inset-top) - var(--credit-strip) - 3.5rem)
+    );
   }
 }
 
@@ -164,18 +190,17 @@ body {
  * controls rendered in MapLibre's light theme and sat at `bottom: 0`, behind
  * the search sheet and under the home indicator. Two ancestor classes rather
  * than one because MapLibre doubles up on its own elements, e.g.
- * `.maplibregl-ctrl.maplibregl-ctrl-attrib`.
+ * `.maplibregl-ctrl.maplibregl-ctrl-scale`.
  */
 
 /*
- * Clear of the bottom sheet, and of the home indicator below it.
+ * Clear of the bottom sheet, and of the credit line below it.
  *
- * The collapsed sheet is 50px tall plus its own safe-area padding — 58px off
- * the bottom, and the same on a phone as on a desktop. The old 13rem/9rem
- * offsets were guesses at that height and overshot it by 160px and 86px, which
- * left the credit and the zoom buttons stranded in the middle of the map
- * instead of sitting against its edge. One offset covers both now, with enough
- * margin to read as deliberate rather than touching.
+ * The collapsed sheet is 50px tall, and the same on a phone as on a desktop.
+ * The old 13rem/9rem offsets were guesses at that height and overshot it by
+ * 160px and 86px, which left the zoom buttons stranded in the middle of the
+ * map instead of sitting against its edge. One offset covers every corner now,
+ * with enough margin to read as deliberate rather than touching.
  */
 .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-left,
 .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-bottom-right {
@@ -198,41 +223,6 @@ body {
   right: env(safe-area-inset-right);
 }
 
-/* Compact carries its own background at the same weight, so it needs naming. */
-.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib,
-.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib.maplibregl-compact {
-  background: rgb(var(--surface) / 0.88);
-  color: rgb(var(--muted));
-}
-
-.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib a {
-  color: rgb(var(--accent-fg));
-}
-
-/*
- * Expanded, the attribution spans the full width of its corner, so on a phone
- * it slides under the zoom buttons and clips "OpenStreetMap" against the
- * bezel. Stop it short of that corner and let it wrap — the credit is a
- * licence term, so it has to stay legible rather than just fit.
- *
- * Narrow screens only. MapLibre sizes this corner to 372px whatever the
- * viewport, so capping it unconditionally wrapped the credit onto two lines
- * even on a desktop with a thousand pixels to spare, where the zoom buttons
- * are nowhere near it.
- */
-@media (max-width: 480px) {
-  .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib.maplibregl-compact-show {
-    /* MapLibre re-declares content-box over the global reset, and it carries
-       36px of padding for the ⓘ — so without this the cap is 36px short. */
-    box-sizing: border-box;
-    max-width: calc(100% - 3.5rem);
-  }
-}
-
-.maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib-inner {
-  white-space: normal;
-}
-
 .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-group {
   background: rgb(var(--surface) / 0.92);
   border: 1px solid rgb(var(--line) / 0.6);
@@ -247,8 +237,7 @@ body {
  * They need flipping over a dark surface and left alone over a light one —
  * inverting unconditionally is what made them vanish before.
  */
-:root[data-theme='dark'] .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-group button span,
-:root[data-theme='dark'] .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-attrib-button {
+:root[data-theme='dark'] .maplibregl-map .maplibregl-control-container .maplibregl-ctrl-group button span {
   filter: invert(1);
 }
 
@@ -260,35 +249,57 @@ body {
 }
 
 /*
- * Google tile credit.
+ * Map credit.
  *
- * Google asks for their logo at 16dp or more plus the viewport's copyright
- * line, in the bottom corner of the tiles. It sits opposite MapLibre's own
- * attribution so the two never overlap, and clears the sheet by the same
- * amount the map controls do.
+ * The basemap licences require this on screen, and Google additionally require
+ * their logo at 16dp or more beside the viewport's copyright line. MapLibre's
+ * own control put all of it in a corner of the map, where it needed a box to
+ * stay legible over the cartography and still wrapped "OpenStreetMap
+ * contributors" onto a second line to dodge the zoom buttons.
+ *
+ * Under the search sheet it gets a full-width line to itself and reads as a
+ * caption on the app rather than as litter on the map. Still positioned over
+ * the map — it is the tiles it credits — but at the very bottom of it, with a
+ * scrim so it survives satellite imagery underneath.
  */
-.google-credit {
+.map-credit {
   position: absolute;
-  right: 0.5rem;
-  bottom: var(--map-chrome-bottom);
-  z-index: 1;
+  inset-inline: 0;
+  bottom: var(--kb);
+  z-index: 30;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.4rem;
-  max-width: calc(100% - 4.5rem);
-  padding: 0.15rem 0.45rem;
-  border-radius: 0.4rem;
-  background: rgb(var(--surface) / 0.88);
-  color: rgb(var(--muted));
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.15rem max(0.75rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom))
+    max(0.75rem, env(safe-area-inset-left));
+  background: linear-gradient(to top, rgb(var(--page) / 0.85), rgb(var(--page) / 0));
+  color: rgb(var(--subtle));
   font-size: 10px;
-  line-height: 1.3;
+  line-height: 1.15;
+  text-align: center;
+  /* A caption, not a target: taps belong to the map underneath it. */
   pointer-events: none;
 }
 
-.google-credit img {
+.map-credit p {
+  margin: 0;
+  min-width: 0;
+}
+
+.map-credit img {
   height: 18px;
   width: auto;
   flex-shrink: 0;
+}
+
+/* The licence links are the one part of the strip worth clicking. */
+.map-credit a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  pointer-events: auto;
 }
 
 /* Trip stop pins */

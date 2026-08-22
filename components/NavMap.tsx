@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl, { GeoJSONSource, LngLatBoundsLike, Map, MapMouseEvent, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { TERRAIN_DEM_URL, appEnv, getGoogleMapsKey, googleMapTypeFor, resolveMapStyle } from '@/lib/config';
+import { CreditRun, EMPTY_CREDIT, MapCredit, parseAttribution, sameCredit } from '@/lib/attribution';
 import { GOOGLE_PROTOCOL, fetchGoogleCopyright, googleTileProtocol } from '@/lib/services/googleTiles';
 import { boundsOf } from '@/lib/geometry';
 import { ChargerSite, Coordinate, HazardReport, Place, RoadAlert, RouteResponse, TrafficJam, UserPosition, Waypoint } from '@/types/map';
@@ -40,6 +41,12 @@ type Props = {
   onPlaceSelect: (place: Place) => void;
   onAlternativeSelect: (id: string) => void;
   onMapLongPress: (point: Coordinate) => void;
+  /**
+   * Credit owed for the basemap on screen. Lifted out rather than drawn here
+   * because it belongs under the search bar with the rest of the app's chrome,
+   * and it has to keep showing while the map is up whatever the sheet is doing.
+   */
+  onAttributionChange: (credit: MapCredit) => void;
 };
 
 const SOURCES = {
@@ -57,6 +64,58 @@ const TERRAIN_SOURCE = 'terrain-dem';
 
 /** Identity of a loaded basemap: which cartography, and which of its two renderings. */
 const styleKey = (id: string, dark: boolean) => `${id}:${dark ? 'dark' : 'light'}`;
+
+/**
+ * The credit owed for what is actually being drawn.
+ *
+ * A basemap's attribution is not in its style JSON — it rides in on each
+ * source's TileJSON, so it has to be read off the live source object. A source
+ * we declare ourselves is the other way round: the credit is in the spec and
+ * MapLibre never copies it across. Hence both lookups below.
+ *
+ * Sources nothing draws are skipped: the DEM is loaded under every style so
+ * terrain can be switched on without a restyle, and crediting tiles that were
+ * never fetched would be as wrong as omitting ones that were.
+ */
+function collectSourceCredits(map: Map): CreditRun[][] {
+  let style: ReturnType<Map['getStyle']> | undefined;
+  try {
+    style = map.getStyle();
+  } catch {
+    return [];
+  }
+  if (!style) return [];
+
+  const drawn = new Set<string>();
+  for (const layer of style.layers ?? []) {
+    // Background and sky layers have no source, hence the widening.
+    const source = (layer as { source?: string }).source;
+    if (source) drawn.add(source);
+  }
+  const terrain = map.getTerrain()?.source;
+  if (terrain) drawn.add(terrain);
+
+  const credits: CreditRun[][] = [];
+  // Styles routinely point several sources at one tile host, and one credit
+  // printed twice looks like a bug rather than like diligence.
+  const seen = new Set<string>();
+
+  for (const id of drawn) {
+    // Two places to look, and both matter. A third-party style declares no
+    // attribution in its JSON and relies on MapLibre copying one over from the
+    // source's TileJSON; a source we add inline — the DEM — carries it in the
+    // spec we wrote and never gets it copied onto the live object. Checking
+    // only the live object credits the basemap and silently drops elevation.
+    const spec = style.sources?.[id] as { attribution?: string } | undefined;
+    const attribution = map.getSource(id)?.attribution ?? spec?.attribution;
+    if (!attribution || seen.has(attribution)) continue;
+    seen.add(attribution);
+    const runs = parseAttribution(attribution);
+    if (runs.length) credits.push(runs);
+  }
+
+  return credits;
+}
 
 const emptyCollection = (): GeoJSON.FeatureCollection => ({ type: 'FeatureCollection', features: [] });
 
@@ -119,12 +178,17 @@ export function NavMap({
   onChargerSelect,
   onPlaceSelect,
   onAlternativeSelect,
-  onMapLongPress
+  onMapLongPress,
+  onAttributionChange
 }: Props) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
   /** Live copyright for the Google tiles on screen; '' when not on Google. */
   const [googleCopyright, setGoogleCopyright] = useState('');
+  /** Google's share of the credit, readable from map events bound once. */
+  const googleCreditRef = useRef<{ logoSrc: string | null; copyright: string }>({ logoSrc: null, copyright: '' });
+  /** Last credit handed up, so repeat map events can't loop a render. */
+  const publishedCreditRef = useRef<MapCredit>(EMPTY_CREDIT);
   const userMarkerRef = useRef<Marker | null>(null);
   const waypointMarkersRef = useRef<Marker[]>([]);
   const styleReadyRef = useRef(false);
@@ -136,7 +200,7 @@ export function NavMap({
 
   // Handlers land in map event callbacks that are registered once; refs keep
   // those callbacks pointing at the current props without re-binding listeners.
-  const handlersRef = useRef({ onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange });
+  const handlersRef = useRef({ onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange, onAttributionChange });
   const dataRef = useRef({ route, activeAlternativeId, chargers, places, reports, alerts, jams });
 
   // Both were assigned during render, which React does not allow — a render
@@ -145,9 +209,32 @@ export function NavMap({
   // re-binding listeners" behaviour, and this effect is declared above every
   // effect that reads them so it commits first.
   useEffect(() => {
-    handlersRef.current = { onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange };
+    handlersRef.current = { onChargerSelect, onPlaceSelect, onAlternativeSelect, onMapLongPress, onCenterChange, onAttributionChange };
     dataRef.current = { route, activeAlternativeId, chargers, places, reports, alerts, jams };
   });
+
+  /**
+   * Recompute the credit and hand it up if it changed.
+   *
+   * Bound to map events rather than derived from props: which sources are
+   * drawn, and what they claim, is only knowable once the style and its
+   * TileJSONs have loaded.
+   */
+  const publishCredit = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+
+    const sources = collectSourceCredits(map);
+    const { logoSrc, copyright } = googleCreditRef.current;
+    // Google's copyright is fetched per viewport rather than declared on the
+    // source, so it joins the list here instead of coming out of the style.
+    if (copyright) sources.push([{ text: copyright }]);
+
+    const next: MapCredit = { sources, logoSrc };
+    if (sameCredit(publishedCreditRef.current, next)) return;
+    publishedCreditRef.current = next;
+    handlersRef.current.onAttributionChange(next);
+  }, []);
 
   /**
    * Push the current data into every source.
@@ -458,8 +545,9 @@ export function NavMap({
     appliedStyleRef.current = styleKey(styleId, styleDark);
 
     map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }), 'bottom-right');
-    map.addControl(new maplibregl.AttributionControl({ compact: true }), 'bottom-left');
     map.addControl(new maplibregl.ScaleControl({ maxWidth: 90, unit: 'metric' }), 'bottom-left');
+    // No AttributionControl: the credit is rendered under the search bar
+    // instead, out of the map's corner. See MapCredit.
 
     /**
      * Not `isStyleLoaded()`: that stays false while tiles are still pending,
@@ -501,6 +589,15 @@ export function NavMap({
     map.on('load', applyOverlays);
     map.on('styledata', applyOverlays);
     map.on('idle', () => raiseOverlays(map));
+
+    map.on('styledata', publishCredit);
+    map.on('terrain', publishCredit);
+    map.on('sourcedata', (event) => {
+      // Attribution arrives with the TileJSON, which is the 'metadata'
+      // payload; the per-tile events that follow it can't change the credit,
+      // and there is one of those for every tile on screen.
+      if (event.sourceDataType === 'metadata') publishCredit();
+    });
 
     let installPoll: ReturnType<typeof setInterval> | undefined;
     if (!applyOverlays()) {
@@ -545,8 +642,25 @@ export function NavMap({
     const observer = new ResizeObserver(() => map.resize());
     observer.observe(containerRef.current);
 
+    /*
+     * iOS gives the WebGL canvas a compositing layer of its own and slides it
+     * with the visual viewport when the keyboard opens. On the way back the
+     * layer can be left displaced from the DOM around it — the map sitting low
+     * behind a band of bare page background, with the chrome still in the
+     * right place — until something forces a fresh raster. The container never
+     * changes size through any of this, so the observer above never fires.
+     */
+    let settle: ReturnType<typeof setTimeout> | undefined;
+    const resizeAfterKeyboard = () => {
+      clearTimeout(settle);
+      settle = setTimeout(() => map.resize(), 350);
+    };
+    window.visualViewport?.addEventListener('resize', resizeAfterKeyboard);
+
     return () => {
       clearPress();
+      clearTimeout(settle);
+      window.visualViewport?.removeEventListener('resize', resizeAfterKeyboard);
       if (installPoll) clearInterval(installPoll);
       observer.disconnect();
       map.remove();
@@ -732,9 +846,9 @@ export function NavMap({
   /**
    * Google requires their logo and the copyright for the tiles actually in
    * view, refreshed as the viewport changes — the credits differ by region, so
-   * a hardcoded string would be wrong most of the time. Only mounted while a
-   * Google basemap is selected; every other style carries its attribution in
-   * the style JSON, which MapLibre's own control already renders.
+   * a hardcoded string would be wrong most of the time. Only fetched while a
+   * Google basemap is selected; every other style's credit comes off its
+   * sources, which collectSourceCredits already reads.
    */
   const googleMapType = googleMapTypeFor(styleId);
 
@@ -783,34 +897,27 @@ export function NavMap({
     };
   }, [googleMapType, styleDark]);
 
+  useEffect(() => {
+    googleCreditRef.current = {
+      // Which wordmark now follows the UI rather than the imagery: the credit
+      // sits in the app's chrome, so the white one would disappear into a
+      // light strip even with satellite tiles behind the map.
+      logoSrc: googleMapType
+        ? styleDark
+          ? 'https://maps.gstatic.com/mapfiles/api-3/images/google_white5.png'
+          : 'https://maps.gstatic.com/mapfiles/api-3/images/google4.png'
+        : null,
+      copyright: googleMapType ? googleCopyright : ''
+    };
+    publishCredit();
+  }, [googleMapType, styleDark, googleCopyright, publishCredit]);
+
   // Inline styles rather than utility classes: maplibre-gl.css sets
   // `.maplibregl-map { position: relative }` and loads after Tailwind, which
   // would otherwise win and collapse the container to zero height.
   return (
     <div style={{ position: 'absolute', inset: 0 }}>
       <div ref={containerRef} style={{ position: 'absolute', inset: 0 }} />
-      {googleMapType ? (
-        <div className="google-credit">
-          {/* Google's own asset: their logo is a trademark, so it is served
-              from their CDN rather than redrawn. The dark wordmark is for the
-              light roadmap; satellite imagery needs the white one. */}
-          {/* eslint-disable-next-line @next/next/no-img-element -- next/image
-              buys nothing here: the export runs unoptimized, and this is an
-              18px trademark that has to come from Google's own CDN. */}
-          <img
-            src={
-              // Imagery and the dark roadmap both want the white wordmark; the
-              // light roadmap wants the dark one.
-              googleMapType === 'satellite' || styleDark
-                ? 'https://maps.gstatic.com/mapfiles/api-3/images/google_white5.png'
-                : 'https://maps.gstatic.com/mapfiles/api-3/images/google4.png'
-            }
-            alt="Google"
-            height={18}
-          />
-          {googleCopyright ? <span>{googleCopyright}</span> : null}
-        </div>
-      ) : null}
     </div>
   );
 }

@@ -26,6 +26,7 @@ import Link from 'next/link';
 import { AlertBanner } from '@/components/AlertBanner';
 import { ChargerCard } from '@/components/ChargerCard';
 import { ManeuverIcon } from '@/components/ManeuverIcon';
+import { MapCredit } from '@/components/MapCredit';
 import { NavMap } from '@/components/NavMap';
 import { NavPanel } from '@/components/NavPanel';
 import { ReportSheet } from '@/components/ReportSheet';
@@ -82,6 +83,8 @@ import { planDeparture } from '@/lib/departure';
 import { encodePlusCode } from '@/lib/pluscode';
 import { decodeTrip, encodeTrip, estimateRange } from '@/lib/trip';
 import { VoiceSettings, configureVoice, primeSpeech, speak, stopSpeaking } from '@/lib/voice';
+import { EMPTY_CREDIT, MapCredit as Credit } from '@/lib/attribution';
+import { useKeyboardInset } from '@/lib/viewport';
 import { releaseWakeLock, requestWakeLock } from '@/lib/wakelock';
 import { cn, formatDistanceKm, formatDurationMin } from '@/lib/utils';
 import {
@@ -150,7 +153,13 @@ export function MapShell() {
   const [rerouting, setRerouting] = useState(false);
 
   const [preferences, setPreferences] = useState<Preferences>(() => getPreferences());
+  /** Credit for the basemap on screen, reported by the map as styles load. */
+  const [credit, setCredit] = useState<Credit>(EMPTY_CREDIT);
   const resolvedTheme = useResolvedTheme();
+
+  // Keeps the bottom sheet inside the screen the keyboard leaves behind.
+  useKeyboardInset();
+
   // Every basemap now has a light and a dark rendering, so the id says which
   // cartography and the theme says which of the two. Passing both down means a
   // theme flip reloads the style without the id having to change.
@@ -1124,6 +1133,7 @@ export function MapShell() {
   /** Door-to-door time including traffic — what both the ETA and "leave by" use. */
   const travelSeconds = (activeRouteSummary?.durationMin ?? 0) * 60 + (trafficDelay?.seconds ?? 0);
 
+
   /* ------------------------------------------- routing around bad jams */
   useEffect(() => {
     if (!route || !trafficDelay?.onRoute.length || waypoints.length < 2) {
@@ -1240,6 +1250,7 @@ export function MapShell() {
         }
         onAlternativeSelect={(id) => setActiveAlternativeId(id === 'main' ? null : id)}
         onMapLongPress={handleLongPress}
+        onAttributionChange={setCredit}
       />
 
       {navActive && route ? (
@@ -1370,7 +1381,7 @@ export function MapShell() {
       {/* Speed + posted limit, and whatever is coming up on the road */}
       {navActive ? (
         <>
-          <div className="absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+1rem))] left-4 z-30">
+          <div className="absolute bottom-[calc(var(--map-floor)+0.75rem)] left-4 z-30">
             <SpeedPanel
               speedKmh={userPosition && userPosition.speedKmh > 1 ? userPosition.speedKmh : null}
               limitKmh={currentLimitKmh}
@@ -1378,7 +1389,7 @@ export function MapShell() {
             />
           </div>
           {preferences.alertsEnabled && upcomingAlert ? (
-            <div className="pointer-events-none absolute bottom-[max(1.5rem,calc(env(safe-area-inset-bottom)+1rem))] left-1/2 z-30 -translate-x-1/2">
+            <div className="pointer-events-none absolute bottom-[calc(var(--map-floor)+0.75rem)] left-1/2 z-30 -translate-x-1/2">
               <AlertBanner
                 alert={upcomingAlert.alert}
                 distanceM={upcomingAlert.distanceM}
@@ -1390,13 +1401,13 @@ export function MapShell() {
       ) : null}
 
       {reportOpen ? (
-        <div className="absolute bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 z-50 -translate-x-1/2">
+        <div className="absolute bottom-[calc(var(--map-floor)+0.5rem)] left-1/2 z-50 -translate-x-1/2">
           <ReportSheet onReport={handleReport} onClose={() => setReportOpen(false)} />
         </div>
       ) : null}
 
       {selectedCharger ? (
-        <div className="absolute bottom-[max(1rem,calc(env(safe-area-inset-bottom)+0.5rem))] left-1/2 z-40 -translate-x-1/2 lg:left-auto lg:right-[max(1rem,env(safe-area-inset-right))] lg:translate-x-0">
+        <div className="absolute bottom-[calc(var(--map-floor)+0.5rem)] left-1/2 z-40 -translate-x-1/2 lg:left-auto lg:right-[max(1rem,env(safe-area-inset-right))] lg:translate-x-0">
           <ChargerCard
             charger={selectedCharger}
             from={userPosition?.coordinate ?? mapCenter}
@@ -1442,7 +1453,7 @@ export function MapShell() {
       ) : null}
 
       {!navActive && !selectedCharger && !reportOpen ? (
-        <div className="safe-bottom safe-x absolute inset-x-0 bottom-0 z-20">
+        <div className="safe-x absolute inset-x-0 bottom-[var(--map-floor)] z-20">
           <div className="sheet-max mx-auto w-[min(60rem,100%)] rounded-[1.75rem] border border-line bg-surface shadow-panel">
             {/* One surface: search, discovery, and the trip all live here, so
                 there is no separate "where to?" prompt competing with it. */}
@@ -1768,6 +1779,10 @@ export function MapShell() {
           {toast}
         </div>
       ) : null}
+
+      {/* Last in the tree so it draws over the sheet's bottom edge rather than
+          behind it, should a long credit ever need a second line. */}
+      <MapCredit credit={credit} />
     </main>
   );
 }

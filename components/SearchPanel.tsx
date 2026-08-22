@@ -192,8 +192,9 @@ export function SearchPanel({
   }
 
   return (
-    <div className="overflow-hidden">
-      <div className="flex items-center gap-2 px-4 py-3">
+    <div className="flex min-h-0 flex-col overflow-hidden">
+      {/* Pinned: whatever else has to give, the field being typed into stays. */}
+      <div className="flex shrink-0 items-center gap-2 px-4 py-3">
         <Search className="h-4 w-4 shrink-0 text-subtle" />
         <input
           value={query}
@@ -226,7 +227,7 @@ export function SearchPanel({
       </div>
 
       {results.length ? (
-        <div className="max-h-64 overflow-y-auto border-t border-line">
+        <div className="max-h-64 min-h-0 overflow-y-auto border-t border-line">
           {results.map((feature) => (
             <div key={feature.id} className="flex items-center gap-1 border-b border-line/50 px-2 py-1 last:border-0 hover:bg-strong">
               <button type="button" onClick={() => choose(feature, false)} className="flex min-w-0 flex-1 items-start gap-3 px-2 py-2 text-left">
@@ -268,7 +269,7 @@ export function SearchPanel({
       ) : null}
 
       {open ? (
-        <div className="max-h-[min(45vh,26rem)] overflow-y-auto border-t border-line px-4 py-3">
+        <div className="max-h-[min(45vh,26rem)] min-h-0 overflow-y-auto border-t border-line px-4 py-3">
           <div className="flex flex-wrap gap-1.5">
             {PLACE_CATEGORIES.map((category) => (
               <button
