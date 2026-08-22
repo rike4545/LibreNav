@@ -31,10 +31,11 @@ import { NavMap } from '@/components/NavMap';
 import { NavPanel } from '@/components/NavPanel';
 import { ReportSheet } from '@/components/ReportSheet';
 import { SearchPanel } from '@/components/SearchPanel';
+import { LayersSheet } from '@/components/LayersSheet';
 import { SettingsPanel } from '@/components/SettingsPanel';
 import { SpeedPanel } from '@/components/SpeedPanel';
 import { useResolvedTheme } from '@/components/ThemeSync';
-import { appEnv, availableMapStyles, canonicalMapStyleId } from '@/lib/config';
+import { appEnv, availableMapStyles, canonicalMapStyleId, hasGoogleMapsKey } from '@/lib/config';
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
 import { boundsOf, boxAround, haversineMeters, pathAhead } from '@/lib/geometry';
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
@@ -215,6 +216,7 @@ export function MapShell() {
   // stays visible, everything else is one tap away.
   const [panelOpen, setPanelOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
@@ -1098,14 +1100,9 @@ export function MapShell() {
     if (!next.voiceGuidance) stopSpeaking();
   }
 
-  function cycleMapStyle() {
-    // Only what the picker offers: the Google entries are absent until a key is
-    // saved, so the button must not be able to land on one either.
-    const styles = availableMapStyles();
-    const index = styles.findIndex((style) => style.id === mapStyleId);
-    const next = styles[(index + 1) % styles.length];
-    updatePreferences({ ...preferences, mapStyleId: next.id });
-    showToast(`Map style: ${next.label}`);
+  function chooseMapStyle(id: string) {
+    updatePreferences({ ...preferences, mapStyleId: id });
+    setLayersOpen(false);
   }
 
   const activeRouteSummary = useMemo(() => {
@@ -1138,7 +1135,6 @@ export function MapShell() {
   useEffect(() => {
     trafficDelayRef.current = trafficDelay;
   }, [trafficDelay]);
-
 
   /* ------------------------------------------- routing around bad jams */
   useEffect(() => {
@@ -1379,9 +1375,14 @@ export function MapShell() {
               </button>
               <button
                 type="button"
-                onClick={cycleMapStyle}
-                aria-label="Change map style"
-                className="rounded-full border border-line bg-surface p-2.5 text-muted shadow-panel transition hover:bg-strong"
+                onClick={() => setLayersOpen(true)}
+                aria-label="Map style"
+                aria-haspopup="dialog"
+                aria-expanded={layersOpen}
+                className={cn(
+                  'rounded-full border p-2.5 shadow-panel transition',
+                  layersOpen ? 'border-sky-400/60 bg-sky-500/20 text-fg' : 'border-line bg-surface text-muted hover:bg-strong'
+                )}
               >
                 <Layers className="h-4 w-4" />
               </button>
@@ -1453,6 +1454,21 @@ export function MapShell() {
             onClose={() => setSelectedCharger(null)}
           />
         </div>
+      ) : null}
+
+      {layersOpen ? (
+        <LayersSheet
+          styles={availableMapStyles()}
+          currentId={mapStyleId}
+          dark={mapStyleDark}
+          googleHidden={!hasGoogleMapsKey()}
+          onSelect={chooseMapStyle}
+          onOpenSettings={() => {
+            setLayersOpen(false);
+            setSettingsOpen(true);
+          }}
+          onClose={() => setLayersOpen(false)}
+        />
       ) : null}
 
       {settingsOpen ? (

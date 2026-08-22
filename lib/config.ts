@@ -1,5 +1,6 @@
 import type { StyleSpecification } from 'maplibre-gl';
 import { GoogleMapType, googleMapStyle } from '@/lib/services/googleTiles';
+import { ESRI_IMAGERY, OPENTOPOMAP, RasterBasemap, rasterStyle } from '@/lib/services/rasterStyles';
 import { VehicleProfile } from '@/types/map';
 
 /**
@@ -14,13 +15,34 @@ export type Endpoints = {
   mapStyleUrl: string;
 };
 
+/**
+ * A miniature of the cartography, for the picker.
+ *
+ * Style names alone ask people to remember which of Streets, Minimal, Voyager
+ * and Bright is which; a swatch in the style's own palette answers it at a
+ * glance. Three colours is enough to tell them apart — the ground, the water,
+ * and the roads are what actually differ.
+ */
+export type StylePreview = {
+  land: string;
+  water: string;
+  road: string;
+};
+
 export type MapStyleOption = {
   id: string;
   label: string;
+  /** One line on what this basemap is for, shown under the swatch. */
+  hint: string;
   /** Basemap under a light UI. */
   url: string;
   /** The same basemap's dark counterpart, used under a dark UI. */
   darkUrl: string;
+  preview: StylePreview;
+  /** Only where the dark rendering is a different map, not a tinted one. */
+  previewDark?: StylePreview;
+  /** Built here from an XYZ service rather than fetched as a style.json. */
+  raster?: RasterBasemap;
   /** Unusable until the driver supplies their own Google Maps key. */
   needsGoogleKey?: boolean;
 };
@@ -42,24 +64,33 @@ export const MAP_STYLES: MapStyleOption[] = [
   {
     id: 'liberty',
     label: 'Streets',
+    hint: 'Full detail, every road named.',
     url: 'https://tiles.openfreemap.org/styles/liberty',
-    darkUrl: 'https://tiles.openfreemap.org/styles/dark'
+    darkUrl: 'https://tiles.openfreemap.org/styles/dark',
+    preview: { land: '#f3efe7', water: '#a4c8e1', road: '#ffffff' },
+    previewDark: { land: '#1b2330', water: '#16283c', road: '#3d4b60' }
   },
   {
     // Positron and Dark Matter are drawn as a matched pair by CARTO, so this
     // one swaps without any change in character.
     id: 'positron',
     label: 'Minimal',
+    hint: 'Quiet greys; your route does the talking.',
     url: 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json',
-    darkUrl: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json'
+    darkUrl: 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json',
+    preview: { land: '#f5f5f3', water: '#d3dde2', road: '#ffffff' },
+    previewDark: { land: '#12161c', water: '#1c242c', road: '#39424d' }
   },
   {
     // Voyager has no dark twin. Fiord is the closest in spirit — still
     // coloured rather than monochrome — which keeps it distinct from Minimal.
     id: 'voyager',
     label: 'Voyager',
+    hint: 'Warm and readable at speed.',
     url: 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json',
-    darkUrl: 'https://tiles.openfreemap.org/styles/fiord'
+    darkUrl: 'https://tiles.openfreemap.org/styles/fiord',
+    preview: { land: '#f8f4ea', water: '#a3ccdb', road: '#ffffff' },
+    previewDark: { land: '#242a33', water: '#2b3a49', road: '#48525f' }
   },
   {
     // OpenFreeMap ships one dark style, so this lands on the same map as
@@ -67,15 +98,56 @@ export const MAP_STYLES: MapStyleOption[] = [
     // in daylight too, and the alternative is a light map in dark mode.
     id: 'bright',
     label: 'Bright',
+    hint: 'Higher contrast for glare.',
     url: 'https://tiles.openfreemap.org/styles/bright',
-    darkUrl: 'https://tiles.openfreemap.org/styles/dark'
+    darkUrl: 'https://tiles.openfreemap.org/styles/dark',
+    preview: { land: '#faf6f0', water: '#a0c8f0', road: '#fff3d0' },
+    previewDark: { land: '#1b2330', water: '#16283c', road: '#3d4b60' }
+  },
+  {
+    // Imagery is a photograph, so there is nothing to render darker. Both
+    // themes get the same tiles, as with Google's satellite.
+    id: 'satellite',
+    label: 'Satellite',
+    hint: 'Aerial imagery, no key needed.',
+    url: '',
+    darkUrl: '',
+    raster: ESRI_IMAGERY,
+    preview: { land: '#3f4f33', water: '#16283a', road: '#8d9179' }
+  },
+  {
+    // Contours and hillshading, which is the one thing none of the vector
+    // styles above show — and the reason to reach for it in hills.
+    id: 'topo',
+    label: 'Outdoors',
+    hint: 'Contours and trails, capped at z17.',
+    url: '',
+    darkUrl: '',
+    raster: OPENTOPOMAP,
+    preview: { land: '#e9e1c9', water: '#a8cadb', road: '#c98a55' }
   },
   // Built at runtime from the Map Tiles API, so no URLs and no use without a
   // key of your own. resolveMapStyle turns these into a style object; the dark
   // roadmap comes from a styler passed to createSession.
-  { id: 'google-roadmap', label: 'Google', url: '', darkUrl: '', needsGoogleKey: true },
-  // Imagery has no light or dark version — it is a photograph either way.
-  { id: 'google-satellite', label: 'Google satellite', url: '', darkUrl: '', needsGoogleKey: true }
+  {
+    id: 'google-roadmap',
+    label: 'Google',
+    hint: 'Google roads, on your own key.',
+    url: '',
+    darkUrl: '',
+    needsGoogleKey: true,
+    preview: { land: '#f1f3f4', water: '#aadaff', road: '#ffffff' },
+    previewDark: { land: '#1b1f23', water: '#17263c', road: '#3a4149' }
+  },
+  {
+    id: 'google-satellite',
+    label: 'Google satellite',
+    hint: 'Google imagery, on your own key.',
+    url: '',
+    darkUrl: '',
+    needsGoogleKey: true,
+    preview: { land: '#3d4b34', water: '#0f2033', road: '#9aa08c' }
+  }
 ];
 
 const FALLBACK_MAP_STYLE = MAP_STYLES[0];
@@ -256,6 +328,10 @@ export function resolveMapStyleUrl(styleId: string, dark = false): string {
 export function resolveMapStyle(styleId: string, dark = false): string | StyleSpecification {
   const id = canonicalMapStyleId(styleId);
   const match = MAP_STYLES.find((style) => style.id === id);
+
+  // One photograph, one topo sheet: neither has a dark rendering to pick, so
+  // both themes get the same tiles.
+  if (match?.raster) return rasterStyle(match.raster);
 
   if (match?.needsGoogleKey) {
     const key = getGoogleMapsKey();
