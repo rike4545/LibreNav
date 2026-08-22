@@ -51,6 +51,7 @@ import {
   Preferences,
   SavedPlace,
   clearRecents,
+  defaultPreferences,
   getPreferences,
   getRecents,
   getReports,
@@ -153,7 +154,26 @@ export function MapShell() {
   const [progress, setProgress] = useState<NavProgress | null>(null);
   const [rerouting, setRerouting] = useState(false);
 
-  const [preferences, setPreferences] = useState<Preferences>(() => getPreferences());
+  /**
+   * Defaults first, stored preferences once mounted.
+   *
+   * Reading localStorage in the initialiser looks tidier and was wrong: the
+   * static export prerenders this component with the defaults, so the client's
+   * first render disagreed with the HTML it was hydrating. React does not
+   * patch attribute mismatches — it says so and moves on — which left the
+   * preference-driven chrome showing the wrong state until something else
+   * happened to change it. Seeding here matches how the saved places, recents
+   * and trips below already load, and prefsReady keeps the map from mounting
+   * against a style the driver did not pick.
+   */
+  const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
+  const [prefsReady, setPrefsReady] = useState(false);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setPreferences(getPreferences());
+    setPrefsReady(true);
+  }, []);
   /** Credit for the basemap on screen, reported by the map as styles load. */
   const [credit, setCredit] = useState<Credit>(EMPTY_CREDIT);
   const resolvedTheme = useResolvedTheme();
@@ -1241,34 +1261,36 @@ export function MapShell() {
 
   return (
     <main className="relative h-[100dvh] w-full overflow-hidden bg-surface text-fg">
-      <NavMap
-        center={mapCenter}
-        styleId={mapStyleId}
-        styleDark={mapStyleDark}
-        waypoints={waypoints}
-        route={route}
-        activeAlternativeId={activeAlternativeId}
-        chargers={visibleChargers}
-        places={places}
-        reports={reports}
-        alerts={mapAlerts}
-        jams={jams}
-        terrain3d={preferences.terrain3d}
-        userPosition={userPosition}
-        snappedPosition={navActive ? progress?.snapped ?? null : null}
-        navActive={navActive}
-        courseDeg={progress?.courseDeg ?? null}
-        fitRouteToken={fitRouteToken}
-        recenterToken={recenterToken}
-        onCenterChange={setMapCenter}
-        onChargerSelect={setSelectedCharger}
-        onPlaceSelect={(place) =>
+      {prefsReady ? (
+        <NavMap
+          center={mapCenter}
+          styleId={mapStyleId}
+          styleDark={mapStyleDark}
+          waypoints={waypoints}
+          route={route}
+          activeAlternativeId={activeAlternativeId}
+          chargers={visibleChargers}
+          places={places}
+          reports={reports}
+          alerts={mapAlerts}
+          jams={jams}
+          terrain3d={preferences.terrain3d}
+          userPosition={userPosition}
+          snappedPosition={navActive ? progress?.snapped ?? null : null}
+          navActive={navActive}
+          courseDeg={progress?.courseDeg ?? null}
+          fitRouteToken={fitRouteToken}
+          recenterToken={recenterToken}
+          onCenterChange={setMapCenter}
+          onChargerSelect={setSelectedCharger}
+          onPlaceSelect={(place) =>
           setDestination({ id: place.id, name: place.name, label: place.address ?? '', coordinate: place.coordinate })
-        }
-        onAlternativeSelect={(id) => setActiveAlternativeId(id === 'main' ? null : id)}
-        onMapLongPress={handleLongPress}
-        onAttributionChange={setCredit}
-      />
+          }
+          onAlternativeSelect={(id) => setActiveAlternativeId(id === 'main' ? null : id)}
+          onMapLongPress={handleLongPress}
+          onAttributionChange={setCredit}
+        />
+      ) : null}
 
       {navActive && route ? (
         <NavPanel
