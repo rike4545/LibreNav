@@ -47,6 +47,13 @@ final class MapModel {
         didSet { if destination != nil { requestRoute() } }
     }
 
+    private(set) var chargers: [ChargerSite] = [] {
+        didSet { chargerToken += 1 }
+    }
+    private(set) var chargerToken = 0
+    var selectedCharger: ChargerSite?
+    private(set) var chargerError: String?
+
     var recenterToken = 0
     var fitRouteToken = 0
     /// Bumped whenever `route` becomes a different line, so the map rebuilds
@@ -59,6 +66,11 @@ final class MapModel {
     var isMuted: Bool { !preferences.voiceGuidance }
 
     private let geocoder = Geocoder()
+    private let overpass = Overpass()
+    private var chargerTask: Task<Void, Never>?
+    /// Centre the loaded chargers were fetched around, so panning a little
+    /// does not re-query a set that already covers the screen.
+    private var chargerAnchor: CLLocationCoordinate2D?
     private let router = ValhallaClient()
     private var searchTask: Task<Void, Never>?
     private var routeTask: Task<Void, Never>?
@@ -159,6 +171,56 @@ final class MapModel {
                 return
             }
         }
+    }
+
+    // MARK: - Chargers
+
+    /// Reload when the map has moved far enough that the last fetch no longer
+    /// covers what is on screen. Overpass is community infrastructure and each
+    /// call is expensive for them, so this is deliberately lazy about it.
+    func refreshChargersIfNeeded() {
+        guard preferences.showChargers else {
+            chargers = []
+            return
+        }
+
+        let moved = chargerAnchor.map { RouteGeometry.distance($0, mapCenter) } ?? .greatestFiniteMagnitude
+        guard moved > 6_000 else { return }
+
+        chargerAnchor = mapCenter
+        let centre = mapCenter
+        chargerTask?.cancel()
+
+        chargerTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let found = try await self.overpass.chargers(near: centre, radiusKm: 12)
+                guard !Task.isCancelled else { return }
+                self.chargers = found
+                self.chargerError = nil
+            } catch is CancellationError {
+                return
+            } catch {
+                guard !Task.isCancelled else { return }
+                // Keep whatever pins are already on screen: stale chargers are
+                // more use than none, and every mirror being down is common.
+                self.chargerError = error.localizedDescription
+            }
+        }
+    }
+
+    func routeToCharger(_ charger: ChargerSite) {
+        selectedCharger = nil
+        select(Place(
+            id: charger.id,
+            name: charger.name,
+            label: charger.network,
+            coordinate: charger.coordinate
+        ))
+    }
+
+    func distanceToCharger(_ charger: ChargerSite) -> Double {
+        RouteGeometry.distance(origin, charger.coordinate) / 1000
     }
 
     // MARK: - Search

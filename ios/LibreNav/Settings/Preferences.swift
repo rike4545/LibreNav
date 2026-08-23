@@ -51,11 +51,17 @@ final class Preferences {
         didSet { defaults.set(mapStyleID, forKey: Key.style) }
     }
 
+    /// Draw charging stations, and fetch them at all.
+    var showChargers: Bool {
+        didSet { defaults.set(showChargers, forKey: Key.chargers) }
+    }
+
     private enum Key {
         static let theme = "librenav.theme"
         static let imperial = "librenav.imperial"
         static let voice = "librenav.voiceGuidance"
         static let style = "librenav.mapStyle"
+        static let chargers = "librenav.showChargers"
     }
 
     private let defaults: UserDefaults
@@ -70,6 +76,7 @@ final class Preferences {
         imperial = defaults.object(forKey: Key.imperial) as? Bool ?? Self.localeIsImperial
         voiceGuidance = defaults.object(forKey: Key.voice) as? Bool ?? true
         mapStyleID = defaults.string(forKey: Key.style) ?? MapStyleOption.fallback.id
+        showChargers = defaults.object(forKey: Key.chargers) as? Bool ?? true
     }
 
     /// Follow the region's convention rather than assuming metric.

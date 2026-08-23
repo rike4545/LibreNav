@@ -39,6 +39,14 @@ struct SettingsSheet: View {
                 }
 
                 Section {
+                    Toggle("Show chargers", isOn: $preferences.showChargers)
+                } header: {
+                    Text("Map")
+                } footer: {
+                    Text("Charging stations from OpenStreetMap. Off also stops fetching them.")
+                }
+
+                Section {
                     Toggle("Voice guidance", isOn: $preferences.voiceGuidance)
                 } header: {
                     Text("Guidance")

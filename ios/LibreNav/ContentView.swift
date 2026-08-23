@@ -22,7 +22,13 @@ struct ContentView: View {
                 recenterToken: model.recenterToken,
                 fitRouteToken: model.fitRouteToken,
                 routeToken: model.routeToken,
-                onCenterChanged: { model.mapCenter = $0 },
+                chargers: model.chargers,
+                chargerToken: model.chargerToken,
+                onChargerTapped: { model.selectedCharger = $0 },
+                onCenterChanged: {
+                    model.mapCenter = $0
+                    model.refreshChargersIfNeeded()
+                },
                 onLongPress: { model.dropDestination(at: $0) }
             )
             .ignoresSafeArea()
@@ -46,7 +52,20 @@ struct ContentView: View {
 
                 VStack {
                     Spacer()
-                    SearchSheet(model: model)
+                    // The charger card takes the sheet's place while one is
+                    // selected rather than stacking on top of it.
+                    if let charger = model.selectedCharger {
+                        ChargerCard(
+                            charger: charger,
+                            distanceKm: model.distanceToCharger(charger),
+                            imperial: model.preferences.imperial,
+                            onNavigate: { model.routeToCharger(charger) },
+                            onClose: { model.selectedCharger = nil }
+                        )
+                        .padding(.bottom, 8)
+                    } else {
+                        SearchSheet(model: model)
+                    }
                 }
             }
         }
@@ -57,6 +76,10 @@ struct ContentView: View {
         .task {
             model.location.requestAuthorization()
             model.location.start()
+            model.refreshChargersIfNeeded()
+        }
+        .onChange(of: model.preferences.showChargers) { _, _ in
+            model.refreshChargersIfNeeded()
         }
         .alert("You have arrived", isPresented: .init(
             get: { model.nav.hasArrived },

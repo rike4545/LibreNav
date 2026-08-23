@@ -24,12 +24,18 @@ struct MapView: UIViewRepresentable {
     var fitRouteToken: Int
     /// Bumped when the route itself changes, so the line is only rebuilt then.
     var routeToken: Int
+    var chargers: [ChargerSite]
+    /// Bumped when the charger set changes, for the same reason as routeToken.
+    var chargerToken: Int
+    var onChargerTapped: (ChargerSite) -> Void
     var onCenterChanged: (CLLocationCoordinate2D) -> Void
     var onLongPress: (CLLocationCoordinate2D) -> Void
 
     private static let routeSourceID = "route-src"
     private static let routeLayerID = "route-line"
     private static let routeCasingID = "route-casing"
+    private static let chargerSourceID = "chargers-src"
+    private static let chargerLayerID = "chargers-point"
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -44,6 +50,17 @@ struct MapView: UIViewRepresentable {
         map.logoView.isHidden = false
         map.attributionButton.isHidden = false
         map.compassView.compassVisibility = .adaptive
+
+        let tap = UITapGestureRecognizer(
+            target: context.coordinator,
+            action: #selector(Coordinator.handleTap(_:))
+        )
+        // MapLibre installs its own single-tap recogniser for deselecting
+        // annotations; without this ours never fires.
+        for existing in map.gestureRecognizers ?? [] where existing is UITapGestureRecognizer {
+            tap.require(toFail: existing)
+        }
+        map.addGestureRecognizer(tap)
 
         let press = UILongPressGestureRecognizer(
             target: context.coordinator,
@@ -71,6 +88,11 @@ struct MapView: UIViewRepresentable {
         if map.style != nil, context.coordinator.appliedRouteToken != routeToken {
             context.coordinator.appliedRouteToken = routeToken
             context.coordinator.applyRoute(to: map)
+        }
+
+        if map.style != nil, context.coordinator.appliedChargerToken != chargerToken {
+            context.coordinator.appliedChargerToken = chargerToken
+            context.coordinator.applyChargers(to: map)
         }
 
         // The follow camera: tilted, turned to the road ahead, and holding the
@@ -142,6 +164,7 @@ struct MapView: UIViewRepresentable {
         var appliedRecenterToken = 0
         var appliedFitToken = 0
         var appliedRouteToken = -1
+        var appliedChargerToken = -1
         var lastCameraCentre: CLLocationCoordinate2D?
         var lastCameraHeading: CLLocationDirection?
 
@@ -155,12 +178,83 @@ struct MapView: UIViewRepresentable {
             parent.onLongPress(map.convert(point, toCoordinateFrom: map))
         }
 
+        @objc func handleTap(_ gesture: UITapGestureRecognizer) {
+            guard gesture.state == .ended, let map = gesture.view as? MLNMapView else { return }
+            let point = gesture.location(in: map)
+
+            // A pin is a small target on a moving map, so query a box around
+            // the finger rather than the single point under it.
+            let box = CGRect(x: point.x - 22, y: point.y - 22, width: 44, height: 44)
+            let hits = map.visibleFeatures(in: box, styleLayerIdentifiers: [MapView.chargerLayerID])
+            guard
+                let feature = hits.first,
+                let id = feature.attribute(forKey: "id") as? String,
+                let charger = parent.chargers.first(where: { $0.id == id })
+            else { return }
+
+            parent.onChargerTapped(charger)
+        }
+
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             // A style swap drops every source and layer with it, so the route
             // has to be reinstalled each time rather than only once at start.
             // This path ignores the token deliberately: the line is genuinely
             // gone from the new style even though the route never changed.
             applyRoute(to: mapView)
+            applyChargers(to: mapView)
+        }
+
+        /// Charger pins.
+        ///
+        /// Torn down and rebuilt rather than updated in place, because the
+        /// source is recreated from the current set each time. This only runs
+        /// when the charger set actually changes, not per GPS fix.
+        ///
+        /// Not clustered, deliberately. MapLibre's `.clustered` source option
+        /// produced no rendered features here at any zoom — with the source
+        /// rebuilt from scratch and 72 points in it, neither the cluster layer
+        /// nor the unclustered layer drew anything, and it fails silently with
+        /// no error to go on. The Overpass query caps at 200 results over a
+        /// 12 km radius, which stays legible drawn plainly, so this takes the
+        /// version that demonstrably works. Worth revisiting if the cap ever
+        /// rises.
+        func applyChargers(to map: MLNMapView) {
+            guard let style = map.style else { return }
+
+            if let layer = style.layer(withIdentifier: MapView.chargerLayerID) {
+                style.removeLayer(layer)
+            }
+            if let existing = style.source(withIdentifier: MapView.chargerSourceID) {
+                style.removeSource(existing)
+            }
+
+            guard !parent.chargers.isEmpty else { return }
+
+            let features = parent.chargers.map { charger -> MLNPointFeature in
+                let feature = MLNPointFeature()
+                feature.coordinate = charger.coordinate
+                feature.attributes = ["id": charger.id]
+                return feature
+            }
+
+            let source = MLNShapeSource(
+                identifier: MapView.chargerSourceID,
+                shape: MLNShapeCollectionFeature(shapes: features),
+                options: nil
+            )
+            style.addSource(source)
+
+            let points = MLNCircleStyleLayer(identifier: MapView.chargerLayerID, source: source)
+            points.circleColor = NSExpression(forConstantValue: UIColor.systemGreen)
+            // Small enough not to swamp the map when zoomed out, big enough to
+            // be a touch target when zoomed in.
+            points.circleRadius = NSExpression(
+                format: "mgl_interpolate:withCurveType:parameters:stops:($zoomLevel, 'linear', nil, %@)",
+                [10: 4, 14: 7, 17: 10]
+            )
+            points.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
+            points.circleStrokeWidth = NSExpression(forConstantValue: 2)
+            style.addLayer(points)
         }
 
         func mapView(_ mapView: MLNMapView, regionDidChangeAnimated animated: Bool) {
