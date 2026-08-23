@@ -23,13 +23,30 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
         authorization == .authorizedWhenInUse || authorization == .authorizedAlways
     }
 
+    /// Said no, or was never allowed to say yes.
+    ///
+    /// Worth separating from "not yet asked": iOS ignores a second prompt once
+    /// someone has declined, so the only way back is Settings, and the app has
+    /// to say so rather than sitting there with no puck.
+    var isDenied: Bool {
+        authorization == .denied || authorization == .restricted
+    }
+
     /// Set while turn-by-turn is running.
     var isNavigating = false {
         didSet {
             applyAccuracy()
             // Guidance has to keep arriving with the screen off. Asking for
-            // this outside navigation would be a battery cost with no payoff.
-            manager.allowsBackgroundLocationUpdates = isNavigating
+            // this outside navigation would be a battery cost with no payoff,
+            // and asking for it without authorisation is asking for something
+            // that cannot be granted.
+            //
+            // When-in-use plus this flag is the documented pattern for
+            // navigation: iOS keeps the session alive in the background and
+            // shows the blue bar. Always is a bigger ask than guidance needs,
+            // so it is never requested — someone who grants it in Settings
+            // simply gets it.
+            manager.allowsBackgroundLocationUpdates = isNavigating && isAuthorized
             manager.pausesLocationUpdatesAutomatically = !isNavigating
         }
     }
@@ -44,6 +61,10 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
     }
 
     func requestAuthorization() {
+        // Once declined this call does nothing at all, so calling it again on
+        // every launch would look like the prompt is broken. Settings is the
+        // only route back, which is what the banner offers.
+        guard authorization == .notDetermined else { return }
         manager.requestWhenInUseAuthorization()
     }
 

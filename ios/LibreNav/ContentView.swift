@@ -33,7 +33,12 @@ struct ContentView: View {
                     onStop: { model.stopNavigating() }
                 )
             } else {
-                header
+                VStack(spacing: 10) {
+                    header
+                    if model.location.isDenied {
+                        LocationBanner()
+                    }
+                }
 
                 VStack {
                     Spacer()

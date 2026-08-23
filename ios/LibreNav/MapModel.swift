@@ -92,8 +92,18 @@ final class MapModel {
 
     // MARK: - Navigation
 
+    /// True when Start would begin a session that can never receive a fix.
+    var canNavigate: Bool { location.isAuthorized }
+
     func startNavigating() {
         guard let route else { return }
+        // Guidance without a position is a banner that never counts down. Ask
+        // if we have not; if the answer was already no, the banner is on screen
+        // explaining why and pointing at Settings.
+        guard location.isAuthorized else {
+            location.requestAuthorization()
+            return
+        }
         location.isNavigating = true
         nav.imperial = false
         nav.start(route: route, imperial: false)
