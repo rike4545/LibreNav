@@ -11,9 +11,22 @@ import SwiftUI
 @MainActor
 final class MapModel {
     var location = LocationProvider()
+    let preferences = Preferences()
 
-    var styleID = MapStyleOption.fallback.id
-    var style: MapStyleOption { MapStyleOption.named(styleID) }
+    var style: MapStyleOption { MapStyleOption.named(preferences.mapStyleID) }
+
+    /// Whether the dark rendering of the basemap is the one to load.
+    ///
+    /// Derived from the stored choice rather than read back out of the
+    /// environment: `preferredColorScheme` is applied by this same view, and
+    /// reading the environment it sets is a frame behind.
+    func prefersDark(systemIsDark: Bool) -> Bool {
+        switch preferences.theme {
+        case .light: return false
+        case .dark: return true
+        case .system: return systemIsDark
+        }
+    }
 
     var mapCenter = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
 
@@ -43,7 +56,7 @@ final class MapModel {
     /// Turn-by-turn, once it is running.
     let nav = NavigationSession()
     var isNavigating: Bool { nav.isActive }
-    var isMuted = false
+    var isMuted: Bool { !preferences.voiceGuidance }
 
     private let geocoder = Geocoder()
     private let router = ValhallaClient()
@@ -97,6 +110,7 @@ final class MapModel {
 
     func startNavigating() {
         guard let route else { return }
+        nav.setMuted(!preferences.voiceGuidance)
         // Guidance without a position is a banner that never counts down. Ask
         // if we have not; if the answer was already no, the banner is on screen
         // explaining why and pointing at Settings.
@@ -105,8 +119,7 @@ final class MapModel {
             return
         }
         location.isNavigating = true
-        nav.imperial = false
-        nav.start(route: route, imperial: false)
+        nav.start(route: route, imperial: preferences.imperial)
     }
 
     func stopNavigating() {
@@ -115,8 +128,8 @@ final class MapModel {
     }
 
     func toggleMute() {
-        isMuted.toggle()
-        nav.setMuted(isMuted)
+        preferences.voiceGuidance.toggle()
+        nav.setMuted(!preferences.voiceGuidance)
     }
 
     /// A fix arrived. Drives the session, and the follow camera through it.
@@ -139,7 +152,7 @@ final class MapModel {
                 let fresh = try await self.router.route(stops: [from, destination.coordinate], mode: self.mode)
                 guard !Task.isCancelled else { return }
                 self.route = fresh
-                self.nav.start(route: fresh, imperial: false)
+                self.nav.start(route: fresh, imperial: self.preferences.imperial)
             } catch {
                 // Keep guiding on the old line rather than dropping the driver
                 // mid-trip; the next off-route run will try again.

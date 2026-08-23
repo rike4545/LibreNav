@@ -8,6 +8,7 @@ import SwiftUI
 struct NavPanel: View {
     let route: Route
     let progress: NavProgress?
+    let imperial: Bool
     let isMuted: Bool
     let onToggleMute: () -> Void
     let onStop: () -> Void
@@ -50,7 +51,7 @@ struct NavPanel: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 if let progress {
-                    Text(Format.distanceM(progress.distanceToManeuver))
+                    Text(Format.distanceM(progress.distanceToManeuver, imperial: imperial))
                         .font(.system(size: 30, weight: .semibold, design: .rounded))
                         .monospacedDigit()
                 }
@@ -99,7 +100,7 @@ struct NavPanel: View {
                 Text(Format.duration((progress?.remainingSeconds ?? 0) / 60))
                     .font(.subheadline.weight(.medium))
                     .monospacedDigit()
-                Text(Format.distance((progress?.remainingDistance ?? 0) / 1000))
+                Text(Format.distance((progress?.remainingDistance ?? 0) / 1000, imperial: imperial))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .monospacedDigit()

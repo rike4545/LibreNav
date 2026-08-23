@@ -113,7 +113,8 @@ struct SearchSheet: View {
                     Text(destination.name)
                         .font(.headline)
                         .lineLimit(1)
-                    Text(Format.duration(route.summary.durationMin) + " · " + Format.distance(route.summary.distanceKm))
+                    Text(Format.duration(route.summary.durationMin) + " · "
+                         + Format.distance(route.summary.distanceKm, imperial: model.preferences.imperial))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()
@@ -153,15 +154,21 @@ struct SearchSheet: View {
 }
 
 enum Format {
-    static func distance(_ km: Double) -> String {
-        km < 1
-            ? "\(Int((km * 1000).rounded())) m"
-            : String(format: "%.1f km", km)
+    static func distance(_ km: Double, imperial: Bool = false) -> String {
+        distanceM(km * 1000, imperial: imperial)
     }
 
-    /// Metres, rounded the way a driver reads them: to the nearest 10 up close,
-    /// to a tenth of a kilometre further out.
-    static func distanceM(_ metres: Double) -> String {
+    /// Rounded the way a driver reads it: to the nearest 10 up close, to a
+    /// tenth of the larger unit further out. Precision beyond that is noise on
+    /// a figure that changes every second.
+    static func distanceM(_ metres: Double, imperial: Bool = false) -> String {
+        if imperial {
+            let miles = metres / 1609.34
+            if miles < 0.2 {
+                return "\(Int((metres * 3.28084 / 10).rounded()) * 10) ft"
+            }
+            return String(format: "%.1f mi", miles)
+        }
         if metres < 1000 {
             return "\(Int((metres / 10).rounded()) * 10) m"
         }

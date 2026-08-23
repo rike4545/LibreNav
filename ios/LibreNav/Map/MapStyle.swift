@@ -11,6 +11,10 @@ struct MapStyleOption: Identifiable, Hashable {
     let hint: String
     let light: URL
     let dark: URL
+    /// Who to name for this cartography. The legal attribution is MapLibre's
+    /// own button on the map; this is the same fact stated where someone
+    /// choosing a basemap can see it.
+    let credit: String
 
     func url(dark isDark: Bool) -> URL { isDark ? dark : light }
 
@@ -20,28 +24,32 @@ struct MapStyleOption: Identifiable, Hashable {
             label: "Streets",
             hint: "Full detail, every road named.",
             light: URL(string: "https://tiles.openfreemap.org/styles/liberty")!,
-            dark: URL(string: "https://tiles.openfreemap.org/styles/dark")!
+            dark: URL(string: "https://tiles.openfreemap.org/styles/dark")!,
+            credit: "OpenFreeMap · OpenStreetMap"
         ),
         MapStyleOption(
             id: "positron",
             label: "Minimal",
             hint: "Quiet greys; your route does the talking.",
             light: URL(string: "https://basemaps.cartocdn.com/gl/positron-gl-style/style.json")!,
-            dark: URL(string: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json")!
+            dark: URL(string: "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json")!,
+            credit: "CARTO · OpenStreetMap"
         ),
         MapStyleOption(
             id: "voyager",
             label: "Voyager",
             hint: "Warm and readable at speed.",
             light: URL(string: "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json")!,
-            dark: URL(string: "https://tiles.openfreemap.org/styles/fiord")!
+            dark: URL(string: "https://tiles.openfreemap.org/styles/fiord")!,
+            credit: "CARTO / OpenFreeMap · OpenStreetMap"
         ),
         MapStyleOption(
             id: "bright",
             label: "Bright",
             hint: "Higher contrast for glare.",
             light: URL(string: "https://tiles.openfreemap.org/styles/bright")!,
-            dark: URL(string: "https://tiles.openfreemap.org/styles/dark")!
+            dark: URL(string: "https://tiles.openfreemap.org/styles/dark")!,
+            credit: "OpenFreeMap · OpenStreetMap"
         )
     ]
 

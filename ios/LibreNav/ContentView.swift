@@ -3,12 +3,15 @@ import SwiftUI
 
 struct ContentView: View {
     @State private var model = MapModel()
+    @State private var showingSettings = false
     @Environment(\.colorScheme) private var colorScheme
+
+    private var isDark: Bool { model.prefersDark(systemIsDark: colorScheme == .dark) }
 
     var body: some View {
         ZStack(alignment: .top) {
             MapView(
-                styleURL: model.style.url(dark: colorScheme == .dark),
+                styleURL: model.style.url(dark: isDark),
                 initialCenter: model.mapCenter,
                 route: model.route?.coordinates ?? [],
                 destination: model.destination?.coordinate,
@@ -28,6 +31,7 @@ struct ContentView: View {
                 NavPanel(
                     route: route,
                     progress: model.nav.progress,
+                    imperial: model.preferences.imperial,
                     isMuted: model.isMuted,
                     onToggleMute: { model.toggleMute() },
                     onStop: { model.stopNavigating() }
@@ -45,6 +49,10 @@ struct ContentView: View {
                     SearchSheet(model: model)
                 }
             }
+        }
+        .preferredColorScheme(model.preferences.theme.colorScheme)
+        .sheet(isPresented: $showingSettings) {
+            SettingsSheet(preferences: model.preferences)
         }
         .task {
             model.location.requestAuthorization()
@@ -71,18 +79,15 @@ struct ContentView: View {
 
             Spacer()
 
-            Menu {
-                Picker("Basemap", selection: $model.styleID) {
-                    ForEach(MapStyleOption.all) { style in
-                        Text(style.label).tag(style.id)
-                    }
-                }
+            Button {
+                showingSettings = true
             } label: {
-                Image(systemName: "square.3.layers.3d")
+                Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 16, weight: .semibold))
                     .frame(width: 40, height: 40)
                     .background(.regularMaterial, in: Circle())
             }
+            .accessibilityLabel("Settings")
 
             Button {
                 model.recenter()
