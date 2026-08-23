@@ -13,6 +13,9 @@ struct ContentView: View {
                 route: model.route?.coordinates ?? [],
                 destination: model.destination?.coordinate,
                 userCoordinate: model.location.coordinate,
+                navSnapped: model.nav.progress?.snapped,
+                navCourse: model.nav.progress?.course,
+                isNavigating: model.isNavigating,
                 recenterToken: model.recenterToken,
                 fitRouteToken: model.fitRouteToken,
                 onCenterChanged: { model.mapCenter = $0 },
@@ -20,16 +23,34 @@ struct ContentView: View {
             )
             .ignoresSafeArea()
 
-            header
+            if model.isNavigating, let route = model.route {
+                NavPanel(
+                    route: route,
+                    progress: model.nav.progress,
+                    isMuted: model.isMuted,
+                    onToggleMute: { model.toggleMute() },
+                    onStop: { model.stopNavigating() }
+                )
+            } else {
+                header
 
-            VStack {
-                Spacer()
-                SearchSheet(model: model)
+                VStack {
+                    Spacer()
+                    SearchSheet(model: model)
+                }
             }
         }
         .task {
             model.location.requestAuthorization()
             model.location.start()
+        }
+        .alert("You have arrived", isPresented: .init(
+            get: { model.nav.hasArrived },
+            set: { if !$0 { model.stopNavigating() } }
+        )) {
+            Button("Done") { model.stopNavigating() }
+        } message: {
+            Text(model.destination?.name ?? "")
         }
     }
 

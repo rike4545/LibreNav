@@ -13,6 +13,10 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
     private(set) var course: CLLocationDirection?
     private(set) var speedMetersPerSecond: CLLocationSpeed?
     private(set) var authorization: CLAuthorizationStatus = .notDetermined
+    private(set) var accuracy: CLLocationAccuracy = -1
+
+    /// Every fix, for whoever is driving turn-by-turn off it.
+    var onFix: ((CLLocationCoordinate2D, CLLocationAccuracy) -> Void)?
 
     /// True once the user has said yes to something, either level.
     var isAuthorized: Bool {
@@ -21,7 +25,13 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
 
     /// Set while turn-by-turn is running.
     var isNavigating = false {
-        didSet { applyAccuracy() }
+        didSet {
+            applyAccuracy()
+            // Guidance has to keep arriving with the screen off. Asking for
+            // this outside navigation would be a battery cost with no payoff.
+            manager.allowsBackgroundLocationUpdates = isNavigating
+            manager.pausesLocationUpdatesAutomatically = !isNavigating
+        }
     }
 
     private let manager = CLLocationManager()
@@ -70,11 +80,13 @@ final class LocationProvider: NSObject, CLLocationManagerDelegate {
     func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
         guard let latest = locations.last else { return }
         coordinate = latest.coordinate
+        accuracy = latest.horizontalAccuracy
         // A negative course means CoreLocation has no fix on heading yet —
         // usually because the device is stationary. Keeping the last good one
         // is better than spinning the puck to north.
         if latest.course >= 0 { course = latest.course }
         speedMetersPerSecond = latest.speed >= 0 ? latest.speed : nil
+        onFix?(latest.coordinate, latest.horizontalAccuracy)
     }
 
     func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {

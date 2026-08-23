@@ -35,10 +35,27 @@ final class MapModel {
     var recenterToken = 0
     var fitRouteToken = 0
 
+    /// Turn-by-turn, once it is running.
+    let nav = NavigationSession()
+    var isNavigating: Bool { nav.isActive }
+    var isMuted = false
+
     private let geocoder = Geocoder()
     private let router = ValhallaClient()
     private var searchTask: Task<Void, Never>?
     private var routeTask: Task<Void, Never>?
+    /// The last fix fed to the session, so a reroute starts from where the
+    /// driver actually is rather than where the trip began.
+    private var lastFix: CLLocationCoordinate2D?
+
+    init() {
+        nav.onNeedsReroute = { [weak self] in
+            self?.reroute()
+        }
+        location.onFix = { [weak self] coordinate, accuracy in
+            self?.handleFix(coordinate, accuracy: accuracy)
+        }
+    }
 
     /// Where a route starts: the driver if we have them, the map if not, so
     /// the app is still useful before the first fix arrives.
@@ -62,9 +79,58 @@ final class MapModel {
 
     func clearRoute() {
         routeTask?.cancel()
+        stopNavigating()
         destination = nil
         route = nil
         errorMessage = nil
+    }
+
+    // MARK: - Navigation
+
+    func startNavigating() {
+        guard let route else { return }
+        location.isNavigating = true
+        nav.imperial = false
+        nav.start(route: route, imperial: false)
+    }
+
+    func stopNavigating() {
+        nav.stop()
+        location.isNavigating = false
+    }
+
+    func toggleMute() {
+        isMuted.toggle()
+        nav.setMuted(isMuted)
+    }
+
+    /// A fix arrived. Drives the session, and the follow camera through it.
+    func handleFix(_ coordinate: CLLocationCoordinate2D, accuracy: CLLocationAccuracy) {
+        lastFix = coordinate
+        guard nav.isActive else { return }
+        nav.update(with: coordinate, accuracy: accuracy)
+    }
+
+    /// Re-ask Valhalla from the driver's current position, keeping the
+    /// destination. The session restarts on the new line once it lands.
+    private func reroute() {
+        guard let destination else { return }
+        let from = lastFix ?? origin
+        routeTask?.cancel()
+
+        routeTask = Task { [weak self] in
+            guard let self else { return }
+            do {
+                let fresh = try await self.router.route(stops: [from, destination.coordinate], mode: self.mode)
+                guard !Task.isCancelled else { return }
+                self.route = fresh
+                self.nav.start(route: fresh, imperial: false)
+            } catch {
+                // Keep guiding on the old line rather than dropping the driver
+                // mid-trip; the next off-route run will try again.
+                return
+            }
+        }
     }
 
     // MARK: - Search

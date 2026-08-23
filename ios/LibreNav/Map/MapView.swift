@@ -14,6 +14,10 @@ struct MapView: UIViewRepresentable {
     var route: [CLLocationCoordinate2D]
     var destination: CLLocationCoordinate2D?
     var userCoordinate: CLLocationCoordinate2D?
+    /// While guiding: the position snapped to the road, and the road's bearing.
+    var navSnapped: CLLocationCoordinate2D?
+    var navCourse: CLLocationDirection?
+    var isNavigating: Bool
     /// Bumped to recentre on the driver without the camera fighting a drag.
     var recenterToken: Int
     /// Bumped to frame the whole route.
@@ -59,6 +63,26 @@ struct MapView: UIViewRepresentable {
         // style swap re-runs this through the delegate callback instead.
         if map.style != nil {
             context.coordinator.applyRoute(to: map)
+        }
+
+        // The follow camera: tilted, turned to the road ahead, and holding the
+        // driver low in the frame so the space goes to what is coming rather
+        // than what is behind. Driven off the snapped position so the camera
+        // rides the road instead of the raw fix wandering beside it.
+        if isNavigating, let snapped = navSnapped {
+            let camera = MLNMapCamera(
+                lookingAtCenter: snapped,
+                altitude: 600,
+                pitch: 55,
+                heading: navCourse ?? map.camera.heading
+            )
+            map.setCamera(
+                camera,
+                withDuration: 0.9,
+                animationTimingFunction: CAMediaTimingFunction(name: .linear),
+                edgePadding: UIEdgeInsets(top: 260, left: 0, bottom: 40, right: 0),
+                completionHandler: nil
+            )
         }
 
         if context.coordinator.appliedRecenterToken != recenterToken {

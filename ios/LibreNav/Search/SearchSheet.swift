@@ -123,6 +123,17 @@ struct SearchSheet: View {
                     .font(.subheadline.weight(.medium))
             }
 
+            Button {
+                model.startNavigating()
+            } label: {
+                Label("Start", systemImage: "location.north.fill")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 13)
+            }
+            .buttonStyle(.borderedProminent)
+            .buttonBorderShape(.capsule)
+
             Picker("Travel mode", selection: $model.mode) {
                 ForEach(TravelMode.allCases) { mode in
                     Label(mode.label, systemImage: mode.symbolName).tag(mode)
@@ -148,9 +159,35 @@ enum Format {
             : String(format: "%.1f km", km)
     }
 
+    /// Metres, rounded the way a driver reads them: to the nearest 10 up close,
+    /// to a tenth of a kilometre further out.
+    static func distanceM(_ metres: Double) -> String {
+        if metres < 1000 {
+            return "\(Int((metres / 10).rounded()) * 10) m"
+        }
+        return String(format: "%.1f km", metres / 1000)
+    }
+
+    /// What a voice should say, which is coarser than what a screen shows.
+    static func spokenDistance(_ metres: Double, imperial: Bool) -> String {
+        if imperial {
+            let feet = metres * 3.28084
+            if feet < 1000 { return "\(Int((feet / 50).rounded()) * 50) feet" }
+            return String(format: "%.1f miles", metres / 1609.34)
+        }
+        if metres < 1000 { return "\(Int((metres / 50).rounded()) * 50) metres" }
+        return String(format: "%.1f kilometres", metres / 1000)
+    }
+
     static func duration(_ minutes: Double) -> String {
         let total = Int(minutes.rounded())
         if total < 60 { return "\(total) min" }
         return "\(total / 60) h \(total % 60) min"
+    }
+
+    /// Clock time of arrival, which is what people actually plan around.
+    static func eta(_ remainingSeconds: TimeInterval) -> String {
+        let arrival = Date().addingTimeInterval(remainingSeconds)
+        return arrival.formatted(date: .omitted, time: .shortened)
     }
 }
