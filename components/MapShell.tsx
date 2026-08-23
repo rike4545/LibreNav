@@ -1,5 +1,7 @@
 'use client';
 
+import dynamic from 'next/dynamic';
+
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertTriangle,
@@ -26,12 +28,29 @@ import { AlertBanner } from '@/components/AlertBanner';
 import { ChargerCard } from '@/components/ChargerCard';
 import { ManeuverIcon } from '@/components/ManeuverIcon';
 import { MapCredit } from '@/components/MapCredit';
-import { NavMap } from '@/components/NavMap';
+/**
+ * The map, and the two panels most sessions never open, are split out.
+ *
+ * maplibre-gl alone is 1.15 MB of the 1.73 MB this page used to ship, and it
+ * was in the first chunk — so the search bar could not be typed into until the
+ * whole renderer had parsed. Settings and Layers are a straight saving: they
+ * are only fetched if someone opens them.
+ *
+ * ssr:false on all three because none of them can render without a browser,
+ * and this is a static export — there is no server pass to reuse.
+ */
+const NavMap = dynamic(() => import('@/components/NavMap').then((module) => module.NavMap), {
+  ssr: false
+});
 import { NavPanel } from '@/components/NavPanel';
 import { ReportSheet } from '@/components/ReportSheet';
 import { SearchPanel } from '@/components/SearchPanel';
-import { LayersSheet } from '@/components/LayersSheet';
-import { SettingsPanel } from '@/components/SettingsPanel';
+const LayersSheet = dynamic(() => import('@/components/LayersSheet').then((module) => module.LayersSheet), {
+  ssr: false
+});
+const SettingsPanel = dynamic(() => import('@/components/SettingsPanel').then((module) => module.SettingsPanel), {
+  ssr: false
+});
 import { SpeedPanel } from '@/components/SpeedPanel';
 import { useResolvedTheme } from '@/components/ThemeSync';
 import { appEnv, availableMapStyles, canonicalMapStyleId, hasGoogleMapsKey } from '@/lib/config';
