@@ -36,6 +36,8 @@ struct MapView: UIViewRepresentable {
     private static let routeCasingID = "route-casing"
     private static let chargerSourceID = "chargers-src"
     private static let chargerLayerID = "chargers-point"
+    private static let chargerClusterID = "chargers-cluster"
+    private static let chargerCountID = "chargers-cluster-count"
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -240,11 +242,32 @@ struct MapView: UIViewRepresentable {
             let source = MLNShapeSource(
                 identifier: MapView.chargerSourceID,
                 shape: MLNShapeCollectionFeature(shapes: features),
-                options: nil
+                options: [.clustered: true, .clusterRadius: 44, .maximumZoomLevelForClustering: 13]
             )
             style.addSource(source)
 
+            // Clusters first so individual pins draw over them.
+            let clusters = MLNCircleStyleLayer(identifier: MapView.chargerClusterID, source: source)
+            clusters.predicate = NSPredicate(format: "cluster == YES")
+            clusters.circleColor = NSExpression(forConstantValue: UIColor.systemGreen)
+            // Size carries the count instead of a number on top of it.
+            //
+            // A symbol layer with CAST(point_count, 'NSString') is the obvious
+            // way to label these, and it silently kills the whole source's
+            // rendering — clusters and single pins both vanish, with nothing in
+            // the log. Radius is a numeric expression, needs no glyphs, and
+            // survives a basemap change; it is also easier to read at a glance
+            // than a two-digit number on a moving map.
+            clusters.circleRadius = NSExpression(
+                format: "mgl_step:from:stops:(point_count, 14, %@)",
+                [5: 18, 15: 23]
+            )
+            clusters.circleStrokeColor = NSExpression(forConstantValue: UIColor.white)
+            clusters.circleStrokeWidth = NSExpression(forConstantValue: 2)
+            style.addLayer(clusters)
+
             let points = MLNCircleStyleLayer(identifier: MapView.chargerLayerID, source: source)
+            points.predicate = NSPredicate(format: "cluster != YES")
             points.circleColor = NSExpression(forConstantValue: UIColor.systemGreen)
             // Small enough not to swamp the map when zoomed out, big enough to
             // be a touch target when zoomed in.
