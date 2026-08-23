@@ -24,7 +24,9 @@ final class MapModel {
     private(set) var isSearching = false
 
     var destination: Place?
-    private(set) var route: Route?
+    private(set) var route: Route? {
+        didSet { routeToken += 1 }
+    }
     private(set) var isRouting = false
     private(set) var errorMessage: String?
 
@@ -34,6 +36,9 @@ final class MapModel {
 
     var recenterToken = 0
     var fitRouteToken = 0
+    /// Bumped whenever `route` becomes a different line, so the map rebuilds
+    /// the shape then and not on every GPS fix.
+    private(set) var routeToken = 0
 
     /// Turn-by-turn, once it is running.
     let nav = NavigationSession()

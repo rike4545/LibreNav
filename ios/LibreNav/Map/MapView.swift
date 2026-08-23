@@ -22,6 +22,8 @@ struct MapView: UIViewRepresentable {
     var recenterToken: Int
     /// Bumped to frame the whole route.
     var fitRouteToken: Int
+    /// Bumped when the route itself changes, so the line is only rebuilt then.
+    var routeToken: Int
     var onCenterChanged: (CLLocationCoordinate2D) -> Void
     var onLongPress: (CLLocationCoordinate2D) -> Void
 
@@ -61,7 +63,13 @@ struct MapView: UIViewRepresentable {
 
         // The style has to be loaded before a source can be attached to it; a
         // style swap re-runs this through the delegate callback instead.
-        if map.style != nil {
+        //
+        // Gated on the token because updateUIView runs on every SwiftUI pass,
+        // which while guiding is once per GPS fix. Rebuilding an
+        // MLNPolylineFeature from a few hundred coordinates every second, for
+        // a line that has not changed, is pure waste.
+        if map.style != nil, context.coordinator.appliedRouteToken != routeToken {
+            context.coordinator.appliedRouteToken = routeToken
             context.coordinator.applyRoute(to: map)
         }
 
@@ -70,19 +78,32 @@ struct MapView: UIViewRepresentable {
         // than what is behind. Driven off the snapped position so the camera
         // rides the road instead of the raw fix wandering beside it.
         if isNavigating, let snapped = navSnapped {
-            let camera = MLNMapCamera(
-                lookingAtCenter: snapped,
-                altitude: 600,
-                pitch: 55,
-                heading: navCourse ?? map.camera.heading
-            )
-            map.setCamera(
-                camera,
-                withDuration: 0.9,
-                animationTimingFunction: CAMediaTimingFunction(name: .linear),
-                edgePadding: UIEdgeInsets(top: 260, left: 0, bottom: 40, right: 0),
-                completionHandler: nil
-            )
+            let heading = navCourse ?? map.camera.heading
+
+            // Fixes arrive about once a second at navigation accuracy. A 0.9s
+            // animation restarted on each one never finishes, which costs work
+            // continuously and reads as jitter; and standing at a light there
+            // is nothing to animate towards at all. So move only when the
+            // camera would actually go somewhere, and animate over roughly the
+            // gap between fixes so the motion completes.
+            let moved = context.coordinator.lastCameraCentre.map {
+                RouteGeometry.distance($0, snapped)
+            } ?? .greatestFiniteMagnitude
+            let turned = context.coordinator.lastCameraHeading.map {
+                abs(($0 - heading).truncatingRemainder(dividingBy: 360))
+            } ?? .greatestFiniteMagnitude
+
+            if moved > 2 || turned > 2 {
+                context.coordinator.lastCameraCentre = snapped
+                context.coordinator.lastCameraHeading = heading
+                map.setCamera(
+                    MLNMapCamera(lookingAtCenter: snapped, altitude: 600, pitch: 55, heading: heading),
+                    withDuration: 1.0,
+                    animationTimingFunction: CAMediaTimingFunction(name: .linear),
+                    edgePadding: UIEdgeInsets(top: 260, left: 0, bottom: 40, right: 0),
+                    completionHandler: nil
+                )
+            }
         }
 
         if context.coordinator.appliedRecenterToken != recenterToken {
@@ -120,6 +141,9 @@ struct MapView: UIViewRepresentable {
         var parent: MapView
         var appliedRecenterToken = 0
         var appliedFitToken = 0
+        var appliedRouteToken = -1
+        var lastCameraCentre: CLLocationCoordinate2D?
+        var lastCameraHeading: CLLocationDirection?
 
         init(_ parent: MapView) {
             self.parent = parent
@@ -134,6 +158,8 @@ struct MapView: UIViewRepresentable {
         func mapView(_ mapView: MLNMapView, didFinishLoading style: MLNStyle) {
             // A style swap drops every source and layer with it, so the route
             // has to be reinstalled each time rather than only once at start.
+            // This path ignores the token deliberately: the line is genuinely
+            // gone from the new style even though the route never changed.
             applyRoute(to: mapView)
         }
 

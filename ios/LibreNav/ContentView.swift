@@ -18,6 +18,7 @@ struct ContentView: View {
                 isNavigating: model.isNavigating,
                 recenterToken: model.recenterToken,
                 fitRouteToken: model.fitRouteToken,
+                routeToken: model.routeToken,
                 onCenterChanged: { model.mapCenter = $0 },
                 onLongPress: { model.dropDestination(at: $0) }
             )
