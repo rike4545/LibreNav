@@ -18,7 +18,22 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_BASE_PATH: basePath
   },
-  typedRoutes: true
+  typedRoutes: true,
+  /**
+   * Dev-only overlay button.
+   *
+   * It defaults to the bottom-left, sitting on the search field — the control
+   * you reach for most while testing. Every corner of a full-bleed map app has
+   * chrome in it, so this is a choice of what to cover rather than whether:
+   * top-left is the status pill, which is the only one of the four that is
+   * purely a readout and not something you press.
+   *
+   * None of this reaches the deployed site; `output: 'export'` leaves the
+   * overlay out of the build entirely.
+   */
+  devIndicators: {
+    position: 'top-left'
+  }
 };
 
 export default nextConfig;
