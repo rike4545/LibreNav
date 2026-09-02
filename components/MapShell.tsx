@@ -57,6 +57,7 @@ import { appEnv, availableMapStyles, canonicalMapStyleId, hasGoogleMapsKey } fro
 import { getCurrentPosition, watchUserPosition } from '@/lib/geo';
 import { boundsOf, boxAround, haversineMeters, pathAhead } from '@/lib/geometry';
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
+import { arrivedEvent, progressEvent } from '@/lib/embed';
 import { fetchSpeedCameras, positionAlertsOnRoute } from '@/lib/services/alerts';
 import { WazeThrottled, fetchWazeTraffic } from '@/lib/services/waze';
 import { reverseGeocode } from '@/lib/services/geocode';
@@ -139,6 +140,12 @@ const MAX_CHARGER_RETRIES = 3;
  * minutes at 110 km/h), short enough that the box stays a corridor rather than
  * half a country.
  */
+/** Within this of the destination, the trip is done. Matches the iPhone app. */
+const ARRIVAL_M = 30;
+
+/** Slowest a host should have to redraw a progress bar. */
+const PROGRESS_EVENT_MS = 5_000;
+
 /** How far the grip has to travel before a drag counts as a decision. */
 const SHEET_DRAG_THRESHOLD = 56;
 
@@ -251,6 +258,8 @@ export function MapShell() {
   // Read once: the host contract is fixed for the life of the page.
   const embed = useMemo(() => readEmbedConfig(), []);
   const arrivedRef = useRef(false);
+  /** When the last progress event went out, so the host is not flooded. */
+  const progressSentAtRef = useRef(0);
   const autostartRef = useRef(false);
 
   // Start collapsed so the map is unobstructed on open; the search field
@@ -698,6 +707,34 @@ export function MapShell() {
     shapeHintRef.current = next.shapeIndex;
     setProgress(next);
 
+    /**
+     * Arrival.
+     *
+     * arrivedRef existed and was only ever written to false — nothing set it,
+     * nothing read it — so a trip simply ran until the driver stopped it, and
+     * `librenav:arrived` was declared in the protocol and never sent. The ref
+     * is what keeps this to one arrival per trip: fixes keep coming after the
+     * threshold is crossed, and each would otherwise re-announce.
+     *
+     * 30 m matches the iPhone app, so the two agree on when a trip is done.
+     */
+    if (!arrivedRef.current && next.remainingDistanceM <= ARRIVAL_M) {
+      arrivedRef.current = true;
+      if (preferences.voiceGuidance) speak('You have arrived.', { interrupt: true });
+      emitToHost(arrivedEvent(), embed);
+      showToast(`Arrived at ${destination?.name ?? 'your destination'}`);
+      setNavActive(false);
+      return;
+    }
+
+    // Trip state out to whatever is hosting us. Throttled because a fix
+    // arrives about once a second and an embedder wants a progress bar, not a
+    // firehose.
+    if (embed.embedded && Date.now() - progressSentAtRef.current > PROGRESS_EVENT_MS) {
+      progressSentAtRef.current = Date.now();
+      emitToHost(progressEvent(next, userPosition.speedKmh, trafficDelayRef.current?.seconds ?? 0), embed);
+    }
+
     if (next.isOffRoute) {
       offRouteCountRef.current += 1;
     } else {
@@ -995,6 +1032,8 @@ export function MapShell() {
     announcedRef.current.clear();
     shapeHintRef.current = 0;
     offRouteCountRef.current = 0;
+    arrivedRef.current = false;
+    progressSentAtRef.current = 0;
     setNavActive(true);
     setPanelOpen(false);
     setSelectedCharger(null);

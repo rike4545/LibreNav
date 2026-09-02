@@ -179,6 +179,33 @@ export function stopsToWaypoints(stops: Array<{ lat: number; lng: number; name?:
     }));
 }
 
+/**
+ * Trip state while guiding.
+ *
+ * The ETA carries the live traffic delay, because a host showing an arrival
+ * time the app itself disagrees with is worse than showing none.
+ */
+export function progressEvent(
+  progress: { remainingDistanceM: number; remainingSeconds: number; fraction: number },
+  speedKmh: number | null,
+  delaySeconds: number
+): AppEvent {
+  const remainingMin = (progress.remainingSeconds + delaySeconds) / 60;
+
+  return {
+    type: 'librenav:progress',
+    remainingKm: progress.remainingDistanceM / 1000,
+    remainingMin,
+    etaIso: new Date(Date.now() + remainingMin * 60_000).toISOString(),
+    speedKmh: speedKmh && speedKmh > 1 ? speedKmh : null,
+    fraction: progress.fraction
+  };
+}
+
+export function arrivedEvent(): AppEvent {
+  return { type: 'librenav:arrived' };
+}
+
 /** Summary event for a freshly computed route. */
 export function routeEvent(route: RouteResponse, delaySeconds: number, stops: number): AppEvent {
   const durationMin = route.summary.durationMin + delaySeconds / 60;
