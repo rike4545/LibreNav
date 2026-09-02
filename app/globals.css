@@ -280,7 +280,15 @@ body {
   gap: 0.35rem;
   padding: 0.15rem max(0.75rem, env(safe-area-inset-right)) max(0.5rem, env(safe-area-inset-bottom))
     max(0.75rem, env(safe-area-inset-left));
-  background: linear-gradient(to top, rgb(var(--page) / 0.85), rgb(var(--page) / 0));
+  /*
+   * No background on the strip itself.
+   *
+   * It reserves the home indicator's inset in padding, and a gradient across
+   * the whole element paints that reserved space too — 34px of near-solid page
+   * colour with nothing in it, sitting under the credit like a broken empty
+   * band. Legibility is the text's problem, not the strip's, so the pill below
+   * carries it and the map runs cleanly to the bottom edge.
+   */
   color: rgb(var(--subtle));
   /* 12px is the floor for chrome here: this is read at arm's length, in a car,
      often in sunlight. */
@@ -294,6 +302,11 @@ body {
 .map-credit p {
   margin: 0;
   min-width: 0;
+  /* Has to hold up over satellite imagery as well as a pale street map, which
+     is why this is a surface pill rather than a text shadow. */
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: rgb(var(--surface) / 0.82);
 }
 
 .map-credit img {
