@@ -17,7 +17,7 @@ jobs:
       github.event.workflow_run.pull_requests[0] != null
     runs-on: ubuntu-latest
     steps:
-      - name: Read pull request
+      - name: Verify pull request author
         id: pr
         env:
           GH_TOKEN: ${{ github.token }}
@@ -25,11 +25,15 @@ jobs:
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
         run: |
           author="$(gh pr view "$PR_NUMBER" --json author --jq '.author.login')"
-          echo "author=$author" >> "$GITHUB_OUTPUT"
+          case "$author" in
+            dependabot|dependabot\[bot\]|app/dependabot) is_dependabot=true ;;
+            *) is_dependabot=false ;;
+          esac
+          echo "is_dependabot=$is_dependabot" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
       - name: Fetch Dependabot metadata
-        if: steps.pr.outputs.author == 'app/dependabot'
+        if: steps.pr.outputs.is_dependabot == 'true'
         id: metadata
         uses: dependabot/fetch-metadata@v2
         with:
@@ -38,7 +42,7 @@ jobs:
 
       - name: Merge low-risk dependency updates
         if: >
-          steps.pr.outputs.author == 'app/dependabot' &&
+          steps.pr.outputs.is_dependabot == 'true' &&
           (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
            steps.metadata.outputs.update-type == 'version-update:semver-minor')
         env:
