@@ -15,19 +15,6 @@ final class MapModel {
 
     var style: MapStyleOption { MapStyleOption.named(preferences.mapStyleID) }
 
-    /// Whether the dark rendering of the basemap is the one to load.
-    ///
-    /// Derived from the stored choice rather than read back out of the
-    /// environment: `preferredColorScheme` is applied by this same view, and
-    /// reading the environment it sets is a frame behind.
-    func prefersDark(systemIsDark: Bool) -> Bool {
-        switch preferences.theme {
-        case .light: return false
-        case .dark: return true
-        case .system: return systemIsDark
-        }
-    }
-
     var mapCenter = CLLocationCoordinate2D(latitude: 40.7128, longitude: -74.0060)
 
     var query = "" {

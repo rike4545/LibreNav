@@ -6,15 +6,8 @@ const RECENTS_KEY = 'librenav.recents';
 const FAVORITES_KEY = 'librenav.favorites';
 const REPORTS_KEY = 'librenav.reports';
 const OPTIONS_KEY = 'librenav.options';
-/** Exported because the pre-paint theme script in the layout has to read it. */
-export const PREFS_KEY = 'librenav.prefs';
+const PREFS_KEY = 'librenav.prefs';
 
-/**
- * Same-tab counterpart to the `storage` event, which only fires in *other*
- * tabs. The theme sync in the root layout listens on this so a theme change
- * made in Settings lands immediately instead of on the next navigation.
- */
-export const PREFS_CHANGED_EVENT = 'librenav:preferences';
 const VEHICLE_KEY = 'librenav.vehicle';
 const VOICE_KEY = 'librenav.voice';
 const TRIPS_KEY = 'librenav.trips';
@@ -25,11 +18,7 @@ export type SavedPlace = SearchFeature & {
   savedAt: string;
 };
 
-export type ThemeChoice = 'dark' | 'light' | 'system';
-
 export type Preferences = {
-  /** UI theme. 'system' follows the OS setting. */
-  theme: ThemeChoice;
   imperial: boolean;
   voiceGuidance: boolean;
   mapStyleId: string;
@@ -66,7 +55,6 @@ export const defaultRouteOptions: RouteOptions = {
 };
 
 export const defaultPreferences: Preferences = {
-  theme: 'system',
   // Follow the locale's convention rather than assuming metric.
   imperial: typeof navigator !== 'undefined' && /^en-(US|GB|MM|LR)/i.test(navigator.language ?? ''),
   voiceGuidance: true,
@@ -174,15 +162,17 @@ export function saveRouteOptions(options: RouteOptions): RouteOptions {
 }
 
 export function getPreferences(): Preferences {
-  return { ...defaultPreferences, ...safeRead<Partial<Preferences>>(PREFS_KEY, {}) };
+  const preferences = { ...defaultPreferences, ...safeRead<Partial<Preferences>>(PREFS_KEY, {}) };
+  // Ignore legacy manual overrides, including when preferences are saved again.
+  Reflect.deleteProperty(preferences, 'theme');
+  return preferences;
 }
 
 export function savePreferences(preferences: Preferences): Preferences {
-  safeWrite(PREFS_KEY, preferences);
-  if (typeof window !== 'undefined') {
-    window.dispatchEvent(new CustomEvent(PREFS_CHANGED_EVENT, { detail: preferences }));
-  }
-  return preferences;
+  const next = { ...preferences };
+  Reflect.deleteProperty(next, 'theme');
+  safeWrite(PREFS_KEY, next);
+  return next;
 }
 
 export function getVoiceSettings(): VoiceSettings {

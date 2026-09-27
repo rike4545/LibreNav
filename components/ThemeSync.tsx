@@ -1,44 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { PREFS_CHANGED_EVENT, PREFS_KEY } from '@/lib/storage';
-import { ResolvedTheme, applyTheme, readThemeChoice, resolveTheme, watchSystemTheme } from '@/lib/theme';
+import { ResolvedTheme, applyTheme, systemTheme, watchSystemTheme } from '@/lib/theme';
 
-/**
- * Keeps <html data-theme> matching the stored preference.
- *
- * THEME_BOOTSTRAP in the layout gets the first paint right; this keeps it right
- * afterwards — when the OS flips while the app is open on 'system', when
- * Settings changes the choice, and when another tab does. It lives in the root
- * layout rather than in MapShell so /discounts is covered too.
- */
+/** Keeps every route in sync with the OS after the pre-paint bootstrap. */
 export function ThemeSync() {
   useEffect(() => {
-    let stopWatching: (() => void) | null = null;
-
-    const sync = () => {
-      const choice = readThemeChoice();
-      applyTheme(resolveTheme(choice));
-
-      stopWatching?.();
-      // Only track the OS while the user has actually delegated to it.
-      stopWatching = choice === 'system' ? watchSystemTheme(applyTheme) : null;
-    };
-
-    sync();
-
-    const onStorage = (event: StorageEvent) => {
-      if (event.key === null || event.key === PREFS_KEY) sync();
-    };
-
-    window.addEventListener(PREFS_CHANGED_EVENT, sync);
-    window.addEventListener('storage', onStorage);
-
-    return () => {
-      stopWatching?.();
-      window.removeEventListener(PREFS_CHANGED_EVENT, sync);
-      window.removeEventListener('storage', onStorage);
-    };
+    const stopWatching = watchSystemTheme(applyTheme);
+    applyTheme(systemTheme());
+    return stopWatching;
   }, []);
 
   return null;
@@ -50,7 +20,7 @@ export function ThemeSync() {
  *
  * It follows the `data-theme` attribute rather than re-deriving the choice,
  * so ThemeSync stays the single writer and there is no second copy of the
- * preference/matchMedia subscriptions to keep in step.
+ * matchMedia subscriptions to keep in step.
  */
 export function useResolvedTheme(): ResolvedTheme {
   // Read on the very first render, not in the effect. THEME_BOOTSTRAP has

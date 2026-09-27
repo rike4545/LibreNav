@@ -5,7 +5,7 @@ import { BatteryCharging, Coffee, Globe, History, KeyRound, Play, RotateCcw, Ser
 import { DEFAULT_ENDPOINTS, Endpoints, availableMapStyles, canonicalMapStyleId, getEndpoints, getGoogleMapsKey, getLocalDataKey, resetEndpoints, saveEndpoints, saveGoogleMapsKey, saveLocalDataKey } from '@/lib/config';
 import { resetGoogleSessions, verifyGoogleMapsKey } from '@/lib/services/googleTiles';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
-import { Preferences, ThemeChoice, TripRecord } from '@/lib/storage';
+import { Preferences, TripRecord } from '@/lib/storage';
 import { VoiceSettings, getServerVoicesSnapshot, getVoicesSnapshot, onVoicesChanged, previewVoice, speechSupported } from '@/lib/voice';
 import { cn } from '@/lib/utils';
 import { VehicleProfile } from '@/types/map';
@@ -113,24 +113,9 @@ export function SettingsPanel({
         <Section title="Display" icon={<Globe className="h-4 w-4" />}>
           <div className="mb-3">
             <div className="text-xs font-medium text-muted">Theme</div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {(['system', 'light', 'dark'] as ThemeChoice[]).map((choice) => (
-                <button
-                  key={choice}
-                  type="button"
-                  onClick={() => onPreferencesChange({ ...preferences, theme: choice })}
-                  aria-pressed={preferences.theme === choice}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition',
-                    preferences.theme === choice
-                      ? 'border-sky-400 bg-sky-500/25 text-fg'
-                      : 'border-line bg-raised text-muted hover:bg-strong'
-                  )}
-                >
-                  {choice}
-                </button>
-              ))}
-            </div>
+            <p className="mt-2 text-xs text-muted">
+              Automatic — follows your device’s light or dark appearance.
+            </p>
           </div>
           <Toggle
             label="Imperial units"
