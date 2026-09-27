@@ -6,7 +6,7 @@ struct ContentView: View {
     @State private var showingSettings = false
     @Environment(\.colorScheme) private var colorScheme
 
-    private var isDark: Bool { model.prefersDark(systemIsDark: colorScheme == .dark) }
+    private var isDark: Bool { colorScheme == .dark }
 
     var body: some View {
         ZStack(alignment: .top) {
@@ -69,7 +69,6 @@ struct ContentView: View {
                 }
             }
         }
-        .preferredColorScheme(model.preferences.theme.colorScheme)
         .sheet(isPresented: $showingSettings) {
             SettingsSheet(preferences: model.preferences)
         }
