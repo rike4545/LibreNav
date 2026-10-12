@@ -8,8 +8,6 @@ updates:
       time: "09:00"
       timezone: America/New_York
     open-pull-requests-limit: 5
-    labels:
-      - dependencies
     groups:
       production-minor-and-patch:
         dependency-type: production
@@ -27,5 +25,3 @@ updates:
     schedule:
       interval: monthly
     open-pull-requests-limit: 3
-    labels:
-      - dependencies
