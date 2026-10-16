@@ -33,13 +33,13 @@ test('EV estimate treats a trip exactly at reserve as reachable', () => {
   assert.equal(estimate.reserveReachedKm, null);
 });
 
-test('negative terrain energy increases arrival charge but is not credited as extra reserve-route distance', () => {
+test('negative terrain energy improves arrival charge without extending reserve-distance estimate', () => {
   const estimate = estimateRange(route(200), vehicle, -5);
   assert.ok(estimate);
   assert.equal(estimate.climbKwh, -5);
-  assert.equal(estimate.arrivalSocPercent, 18.333333333333332);
+  assert.equal(estimate.arrivalSocPercent, 21.666666666666668);
   assert.equal(estimate.reachable, true);
-  assert.equal(estimate.reserveReachedKm, null);
+  assert.equal(estimate.reserveReachedKm, 195);
 });
 
 test('EV estimate rejects zero and negative consumption or battery capacity', () => {
