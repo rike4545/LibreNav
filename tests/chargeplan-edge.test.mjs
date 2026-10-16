@@ -76,14 +76,20 @@ test('planner rejects non-finite terrain energy', async () => {
 
 test('empty and zero-length route geometry return an empty complete plan without lookup', async () => {
   configure({ distance: 0 });
-  assert.deepEqual(await planChargingStops(route([]), validVehicle, 0), { stops: [], incomplete: false });
-  assert.deepEqual(await planChargingStops(route([[0, 0], [0, 0]]), validVehicle, 0), { stops: [], incomplete: false });
+  const emptyPlan = await planChargingStops(route([]), validVehicle, 0);
+  const zeroLengthPlan = await planChargingStops(route([[0, 0], [0, 0]]), validVehicle, 0);
+  assert.equal(emptyPlan.stops.length, 0);
+  assert.equal(emptyPlan.incomplete, false);
+  assert.equal(zeroLengthPlan.stops.length, 0);
+  assert.equal(zeroLengthPlan.incomplete, false);
   assert.equal(fetchCount, 0);
 });
 
 test('already reachable route returns no stops and does not query charger data', async () => {
   configure({ distance: 10_000 });
-  assert.deepEqual(await planChargingStops(route(), validVehicle, 0), { stops: [], incomplete: false });
+  const plan = await planChargingStops(route(), validVehicle, 0);
+  assert.equal(plan.stops.length, 0);
+  assert.equal(plan.incomplete, false);
   assert.equal(fetchCount, 0);
 });
 
