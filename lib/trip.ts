@@ -20,7 +20,7 @@ export function encodeTrip(waypoints: Waypoint[], options: RouteOptions): string
       const lat = point.coordinate.lat.toFixed(5);
       const lng = point.coordinate.lng.toFixed(5);
       // Commas and pipes are the separators, so strip them from names.
-      const name = point.name.replace(/[|,]/g, ' ').trim().slice(0, 60);
+      const name = point.name.replace(/[|,]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 60);
       return `${lat},${lng},${name}`;
     })
     .join('|');
