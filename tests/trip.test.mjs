@@ -138,5 +138,6 @@ test('EV range model marks a route unreachable when arrival charge falls below r
   );
   assert.ok(estimate);
   assert.equal(estimate.reachable, false);
-  assert.ok(estimate.arrivalSocPercent < estimate.reserveReachedKm);
+  assert.ok(estimate.arrivalSocPercent < 15);
+  assert.notEqual(estimate.reserveReachedKm, null);
 });
