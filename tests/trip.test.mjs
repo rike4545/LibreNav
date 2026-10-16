@@ -13,6 +13,18 @@ const defaultRouteOptions = {
   alternatives: false
 };
 
+function loadRange() {
+  const source = readFileSync(new URL('../lib/ev/range.ts', import.meta.url), 'utf8');
+  const { outputText } = ts.transpileModule(source, {
+    compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 }
+  });
+  const exports = {};
+  vm.runInNewContext(outputText, { exports });
+  return exports;
+}
+
+const range = loadRange();
+
 function loadTrip() {
   const source = readFileSync(new URL('../lib/trip.ts', import.meta.url), 'utf8');
   const { outputText } = ts.transpileModule(source, {
@@ -22,8 +34,9 @@ function loadTrip() {
   vm.runInNewContext(outputText, {
     exports,
     require: (id) => {
-      assert.equal(id, '@/lib/storage', `Unexpected import: ${id}`);
-      return { defaultRouteOptions };
+      if (id === '@/lib/storage') return { defaultRouteOptions };
+      if (id === '@/lib/ev/range') return range;
+      assert.fail(`Unexpected import: ${id}`);
     }
   });
   return exports;
@@ -105,4 +118,25 @@ test('EV range estimate returns null for missing route or invalid vehicle values
   assert.equal(trip.estimateRange({ summary: { distanceKm: 20 } }, {
     batteryKwh: 0, consumptionKwh100km: 18, socPercent: 80, reservePercent: 15
   }), null);
+});
+
+
+test('EV range model rejects non-finite and out-of-domain vehicle inputs', () => {
+  const base = { batteryKwh: 75, consumptionKwh100km: 18, socPercent: 80, reservePercent: 15 };
+  const route = { summary: { distanceKm: 100 } };
+  assert.equal(range.estimateRange(route, { ...base, socPercent: 101 }), null);
+  assert.equal(range.estimateRange(route, { ...base, reservePercent: -1 }), null);
+  assert.equal(range.estimateRange(route, { ...base, consumptionKwh100km: Number.NaN }), null);
+  assert.equal(range.estimateRange({ summary: { distanceKm: -1 } }, base), null);
+  assert.equal(range.estimateRange(route, base, Number.POSITIVE_INFINITY), null);
+});
+
+test('EV range model marks a route unreachable when arrival charge falls below reserve', () => {
+  const estimate = range.estimateRange(
+    { summary: { distanceKm: 400 } },
+    { batteryKwh: 60, consumptionKwh100km: 20, socPercent: 80, reservePercent: 15 }
+  );
+  assert.ok(estimate);
+  assert.equal(estimate.reachable, false);
+  assert.ok(estimate.arrivalSocPercent < estimate.reserveReachedKm);
 });
