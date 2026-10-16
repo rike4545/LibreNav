@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability reporting
+    url: https://github.com/rike4545/LibreNav/security/advisories/new
+    about: Please use private vulnerability reporting when it is enabled; do not post security issues publicly.
+  - name: Contribution guide
+    url: https://github.com/rike4545/LibreNav/blob/main/CONTRIBUTING.md
+    about: Read the contributor guide before opening a pull request.

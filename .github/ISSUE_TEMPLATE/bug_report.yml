@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a reproducible problem in LibreNav
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: "Please search existing issues first. Never include API keys, tokens, private route history, or other sensitive information."
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the problem clearly.
+      placeholder: I expected… but…
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the minimum steps needed to reproduce the issue.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Browser, operating system, and device
+      placeholder: e.g. Firefox on Android
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Logs or screenshots (optional)
+      description: Remove personal data and secrets before sharing.
+    validations:
+      required: false

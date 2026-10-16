@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest an improvement to LibreNav
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: "For large changes, please discuss the idea before starting implementation. Avoid proposals that expose private location history or require tracking in core features."
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: What user problem or limitation would this address?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: Describe the behavior you would like to see.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Turn-by-turn navigation
+        - EV charging and trip planning
+        - Search and map data
+        - Accessibility
+        - Privacy and security
+        - Documentation or developer experience
+        - Other
+    validations:
+      required: true

@@ -8,6 +8,10 @@ no tracking. Everything you save stays in your own browser.
 
 **Live app: https://rike4545.github.io/LibreNav/**
 
+**Contribute:** [Contribution guide](CONTRIBUTING.md) · [Project roadmap](docs/ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Security policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Community metrics](docs/COMMUNITY_METRICS.md)
+
+Bug reports and feature ideas are welcome through the [GitHub issue tracker](https://github.com/rike4545/LibreNav/issues).
+
 If it's useful to you, you can [support the project](https://buymeacoffee.com/myevcompanionapp).
 
 Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla and searched by Photon.
@@ -127,7 +131,8 @@ Key modules:
 - `lib/services/` — routing, geocoding, and Overpass clients
 - `lib/nav.ts` — position matching, off-route detection, ETA, announcement banding
 - `lib/geometry.ts` — haversine, bearings, polyline decoding, windowed path snapping
-- `lib/trip.ts` — share-link encoding and the EV range model
+- `lib/trip.ts` — share-link encoding/decoding, with a compatibility re-export for EV range estimation
+- `lib/ev/range.ts` — pure EV range calculation and input validation
 - `components/NavMap.tsx` — MapLibre layers, clustering, markers, and camera
 - `lib/traffic.ts` — turning jam speeds into a route delay, against posted limits where known
 - `lib/services/reroute.ts` — fencing a jam off and asking Valhalla for the way round
@@ -230,6 +235,22 @@ Routing by [Valhalla](https://valhalla.github.io/valhalla/) via FOSSGIS.
 Geocoding by [Photon](https://photon.komoot.io) via Komoot.
 Basemaps by [OpenFreeMap](https://openfreemap.org) and [CARTO](https://carto.com/basemaps/).
 Elevation from [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/).
+
+## Contributing
+
+Contributions are welcome, including reproducible bug reports, documentation, accessibility improvements, tests, and focused code changes. Please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a pull request. The project roadmap and architecture guide explain current priorities and where changes belong.
+
+Before submitting a change, run:
+
+```bash
+npm ci
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+The GitHub Actions CI workflow runs the code quality checks and static build for pull requests. Do not include private route history, personal location data, or API keys in issues, logs, screenshots, or commits. See [SECURITY.md](SECURITY.md) for vulnerability reporting.
 
 ## License
 
