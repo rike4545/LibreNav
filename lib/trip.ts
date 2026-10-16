@@ -1,5 +1,9 @@
-import { RouteOptions, RouteResponse, TravelMode, VehicleProfile, Waypoint } from '@/types/map';
+import { RouteOptions, TravelMode, Waypoint } from '@/types/map';
 import { defaultRouteOptions } from '@/lib/storage';
+
+// Keep the public trip-module export stable while isolating the pure EV model.
+export { estimateRange } from '@/lib/ev/range';
+export type { RangeEstimate } from '@/lib/ev/range';
 
 /**
  * Trips serialize into the URL so a shared link restores every stop and the
@@ -95,54 +99,5 @@ export function decodeTrip(search: string): { waypoints: Waypoint[]; options: Ro
       preferTwisty: flags.includes('w'),
       alternatives: flags.includes('a')
     }
-  };
-}
-
-/* ------------------------------------------------------------ EV range model */
-
-export type RangeEstimate = {
-  /** Distance the current charge covers, in km. */
-  rangeKm: number;
-  /** kWh the net climb adds (negative when the trip descends overall). */
-  climbKwh: number;
-  /** Charge left on arrival, in percent. Negative means it won't make it. */
-  arrivalSocPercent: number;
-  /** Whether arrival charge stays above the driver's reserve. */
-  reachable: boolean;
-  /** Where along the route the charge runs to reserve, in km from the start. */
-  reserveReachedKm: number | null;
-};
-
-/**
- * Energy model: flat consumption over distance, plus the work the terrain adds.
- *
- * Still ignores temperature and speed, so it remains a planning hint — but
- * elevation was the biggest omission. A mountain crossing and the same distance
- * on the flat are not remotely the same drive, and the old model called them
- * identical.
- */
-export function estimateRange(
-  route: RouteResponse | null,
-  vehicle: VehicleProfile,
-  climbKwh = 0
-): RangeEstimate | null {
-  if (!route || vehicle.batteryKwh <= 0 || vehicle.consumptionKwh100km <= 0) return null;
-
-  const usableKwh = vehicle.batteryKwh * (vehicle.socPercent / 100);
-  const rangeKm = (usableKwh / vehicle.consumptionKwh100km) * 100;
-
-  const neededKwh = (route.summary.distanceKm / 100) * vehicle.consumptionKwh100km + climbKwh;
-  const arrivalSocPercent = ((usableKwh - neededKwh) / vehicle.batteryKwh) * 100;
-
-  const reserveKwh = vehicle.batteryKwh * (vehicle.reservePercent / 100);
-  const distanceToReserveKm =
-    ((usableKwh - reserveKwh - Math.max(0, climbKwh)) / vehicle.consumptionKwh100km) * 100;
-
-  return {
-    rangeKm,
-    climbKwh,
-    arrivalSocPercent,
-    reachable: arrivalSocPercent >= vehicle.reservePercent,
-    reserveReachedKm: distanceToReserveKm < route.summary.distanceKm ? Math.max(0, distanceToReserveKm) : null
   };
 }
