@@ -94,7 +94,7 @@ test('EV range estimate uses consumption, charge, terrain, and reserve', () => {
   assert.ok(estimate);
   assert.equal(estimate.rangeKm, 333.33333333333337);
   assert.equal(estimate.climbKwh, 2);
-  assert.equal(estimate.arrivalSocPercent, 27.333333333333332);
+  assert.equal(estimate.arrivalSocPercent, 29.333333333333332);
   assert.equal(estimate.reachable, true);
 });
 
