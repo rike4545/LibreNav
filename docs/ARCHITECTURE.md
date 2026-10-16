@@ -15,7 +15,8 @@ LibreNav is a browser-first navigation app built with Next.js, TypeScript, Tailw
 
 ## Important domain modules
 
-- `lib/trip.ts` — shareable trip URL encoding/decoding and EV range estimate model.
+- `lib/trip.ts` — shareable trip URL encoding/decoding; re-exports the EV range model for compatibility.
+- `lib/ev/range.ts` — pure EV range estimate with documented units and input validation, separated from browser and routing-service concerns.
 - `lib/geometry.ts` — geographic distance and route geometry calculations.
 - `lib/services/chargeplan.ts` — charging-stop selection along route geometry. It queries charger data and therefore is not a pure calculation module.
 - `lib/services/routing.ts` — route service integration.
