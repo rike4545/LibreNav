@@ -33,6 +33,7 @@ function loadTrip() {
   const exports = {};
   vm.runInNewContext(outputText, {
     exports,
+    URLSearchParams,
     require: (id) => {
       if (id === '@/lib/storage') return { defaultRouteOptions };
       if (id === '@/lib/ev/range') return range;
