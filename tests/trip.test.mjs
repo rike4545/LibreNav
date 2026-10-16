@@ -78,7 +78,7 @@ test('trip encoding strips delimiter characters from names', () => {
   assert.equal(encoded.includes('Coffee | Park'), false);
   const decoded = trip.decodeTrip(`?${encoded}`);
   assert.ok(decoded);
-  assert.equal(decoded.waypoints[1].name.includes('|'), false);
+  assert.equal(decoded.waypoints[1].name, 'Coffee Park');
 });
 
 test('decoder rejects invalid coordinates and out-of-range latitude/longitude', () => {
