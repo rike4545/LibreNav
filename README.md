@@ -131,7 +131,8 @@ Key modules:
 - `lib/services/` — routing, geocoding, and Overpass clients
 - `lib/nav.ts` — position matching, off-route detection, ETA, announcement banding
 - `lib/geometry.ts` — haversine, bearings, polyline decoding, windowed path snapping
-- `lib/trip.ts` — share-link encoding and the EV range model
+- `lib/trip.ts` — share-link encoding/decoding, with a compatibility re-export for EV range estimation
+- `lib/ev/range.ts` — pure EV range calculation and input validation
 - `components/NavMap.tsx` — MapLibre layers, clustering, markers, and camera
 - `lib/traffic.ts` — turning jam speeds into a route delay, against posted limits where known
 - `lib/services/reroute.ts` — fencing a jam off and asking Valhalla for the way round
