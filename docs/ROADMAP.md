@@ -6,13 +6,15 @@ This roadmap prioritizes user value, reliability, and a healthy contributor comm
 
 - [ ] Review and merge the community-readiness PR after CI and maintainer review.
 - [ ] Confirm GitHub issue forms, repository labels, security reporting, and Community Standards are configured as intended.
-- [ ] Document the app architecture and identify high-value test seams.
+- [x] Document the app architecture and identify high-value test seams.
+- [x] Extract the deterministic EV range calculation into `lib/ev/range.ts` while preserving the existing `lib/trip.ts` export.
 - [ ] Keep bug reports reproducible and protect private location data in logs and screenshots.
 - [ ] Label a small set of genuinely approachable issues after maintainers verify their scope.
 
 ## Next: reliability and accessibility
 
 - [ ] Expand automated tests around trip-link parsing, range estimation, routing fallbacks, and charger planning.
+- [x] Add initial deterministic tests for trip-link parsing and EV range model boundaries.
 - [ ] Add tests for malformed input and external-service failures.
 - [ ] Review keyboard navigation, screen-reader names, focus handling, reduced motion, and mobile layout.
 - [ ] Document external service limits and how the app behaves when a provider is unavailable.
@@ -20,7 +22,7 @@ This roadmap prioritizes user value, reliability, and a healthy contributor comm
 
 ## Explore: reusable EV planning logic
 
-The EV range estimate and charging-stop planner may be useful beyond this UI. Before extracting a package:
+The EV range calculation now lives in a pure module at `lib/ev/range.ts`; the trip module re-exports it for compatibility. This is a reusable-code boundary, not yet a separately published package. Before publishing anything:
 
 1. Identify a stable public API and real external use cases.
 2. Separate deterministic calculations from browser/network/service concerns.
