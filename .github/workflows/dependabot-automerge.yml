@@ -35,7 +35,7 @@ jobs:
           head="$(jq -r '.headRefName' <<< "$pr")"
           head_sha="$(jq -r '.headRefOid' <<< "$pr")"
           is_draft="$(jq -r '.isDraft' <<< "$pr")"
-          state="$(jq -r '.state' <<< "$pr")"
+          state="$(jq -r '.state | ascii_downcase' <<< "$pr")"
 
           # Only the two explicitly grouped npm patch/minor update branches
           # are eligible. GitHub Actions and major-version updates are excluded.
@@ -44,7 +44,7 @@ jobs:
             *) echo "PR branch is not an approved npm patch/minor group."; exit 0 ;;
           esac
 
-          if [[ "$author" != "dependabot[bot]" || "$base" != "main" || "$state" != "OPEN" || "$is_draft" == "true" ]]; then
+          if [[ "$author" != "dependabot[bot]" || "$base" != "main" || "$state" != "open" || "$is_draft" == "true" ]]; then
             echo "PR is not an eligible open Dependabot PR targeting main."
             exit 0
           fi
