@@ -33,6 +33,8 @@ jobs:
 
       - run: npm run typecheck
 
+      - run: npm test
+
       - name: Build static export
         # Project sites are served from /<repo>, so assets need that prefix.
         env:
