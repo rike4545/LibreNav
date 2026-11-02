@@ -142,3 +142,18 @@ test('EV range model marks a route unreachable when arrival charge falls below r
   assert.ok(estimate.arrivalSocPercent < 15);
   assert.notEqual(estimate.reserveReachedKm, null);
 });
+
+
+test('shared trip links preserve locked intermediate stops', () => {
+  const lockedTrip = [
+    waypoints[0],
+    { id: 'fixed', name: 'Fixed appointment', label: 'Stop', coordinate: { lat: 40.9, lng: -73.1 }, locked: true },
+    waypoints[1]
+  ];
+  const decoded = trip.decodeTrip('?' + trip.encodeTrip(lockedTrip, routeOptions));
+  assert.ok(decoded);
+  assert.equal(decoded.waypoints.length, 3);
+  assert.equal(decoded.waypoints[1].id.startsWith('shared-'), true);
+  assert.equal(decoded.waypoints[1].locked, true);
+  assert.equal(decoded.waypoints[0].locked, false);
+});

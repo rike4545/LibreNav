@@ -20,6 +20,14 @@ This roadmap prioritizes user value, reliability, and a healthy contributor comm
 - [ ] Document external service limits and how the app behaves when a provider is unavailable.
 - [ ] Review dependency alerts and release notes regularly.
 
+## Multi-stop trip planning
+
+- [x] Optimize intermediate stop order with fixed endpoints and optional locked waypoints.
+- [x] Save, restore, and delete named itineraries locally, separate from recorded drive history.
+- [x] Export planned route geometry and named stops as GPX.
+- [x] Announce intermediate stop arrivals and continue guidance to the next stop.
+- [ ] Validate optimized-route behavior against the live Valhalla deployment and complete native iOS feature parity.
+
 ## Explore: reusable EV planning logic
 
 The EV range calculation now lives in a pure module at `lib/ev/range.ts`; the trip module re-exports it for compatibility. This is a reusable-code boundary, not yet a separately published package. Before publishing anything:

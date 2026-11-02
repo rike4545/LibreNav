@@ -1,6 +1,6 @@
 import { DEFAULT_VEHICLE } from '@/lib/config';
 import { VoiceSettings, defaultVoiceSettings } from '@/lib/voice';
-import { HazardReport, RouteOptions, SearchFeature, VehicleProfile } from '@/types/map';
+import { HazardReport, RouteOptions, SearchFeature, VehicleProfile, Waypoint } from '@/types/map';
 
 const RECENTS_KEY = 'librenav.recents';
 const FAVORITES_KEY = 'librenav.favorites';
@@ -11,6 +11,7 @@ const PREFS_KEY = 'librenav.prefs';
 const VEHICLE_KEY = 'librenav.vehicle';
 const VOICE_KEY = 'librenav.voice';
 const TRIPS_KEY = 'librenav.trips';
+const SAVED_ITINERARIES_KEY = 'librenav.saved-itineraries';
 
 export type SavedPlace = SearchFeature & {
   /** 'home' and 'work' are pinned; everything else is a plain favorite. */
@@ -218,4 +219,30 @@ export function getVehicle(): VehicleProfile {
 export function saveVehicle(vehicle: VehicleProfile): VehicleProfile {
   safeWrite(VEHICLE_KEY, vehicle);
   return vehicle;
+}
+
+
+/** A named, reusable itinerary; kept separately from recorded drive history. */
+export type SavedItinerary = {
+  id: string;
+  name: string;
+  waypoints: Waypoint[];
+  options: RouteOptions;
+  savedAt: string;
+};
+
+export function getSavedItineraries(): SavedItinerary[] {
+  return safeRead<SavedItinerary[]>(SAVED_ITINERARIES_KEY, []);
+}
+
+export function saveItinerary(itinerary: SavedItinerary): SavedItinerary[] {
+  const next = [itinerary, ...getSavedItineraries().filter((item) => item.id !== itinerary.id)].slice(0, 50);
+  safeWrite(SAVED_ITINERARIES_KEY, next);
+  return next;
+}
+
+export function deleteItinerary(id: string): SavedItinerary[] {
+  const next = getSavedItineraries().filter((item) => item.id !== id);
+  safeWrite(SAVED_ITINERARIES_KEY, next);
+  return next;
 }

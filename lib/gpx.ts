@@ -1,4 +1,4 @@
-import { TrackPoint } from '@/types/map';
+import { RouteResponse, TrackPoint, Waypoint } from '@/types/map';
 
 /** Escape the five XML-significant characters in attribute/text content. */
 function escapeXml(value: string): string {
@@ -75,4 +75,38 @@ export function trackDistanceKm(points: TrackPoint[]): number {
     metres += 2 * 6_371_000 * Math.asin(Math.min(1, Math.sqrt(h)));
   }
   return metres / 1000;
+}
+
+
+/** GPX route export with planned geometry and named stops. */
+export function buildRouteGpx(route: RouteResponse, waypoints: Waypoint[], name: string): string {
+  const waypointXml = waypoints.map((point) =>
+    `  <wpt lat="${point.coordinate.lat.toFixed(6)}" lon="${point.coordinate.lng.toFixed(6)}"><name>${escapeXml(point.name)}</name></wpt>`
+  ).join('\n');
+  const routePoints = route.coordinates.map(([lng, lat]) =>
+    `    <rtept lat="${lat.toFixed(6)}" lon="${lng.toFixed(6)}"></rtept>`
+  ).join('\n');
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" creator="LibreNav" xmlns="http://www.topografix.com/GPX/1/1">
+  <metadata><name>${escapeXml(name)}</name><time>${new Date().toISOString()}</time></metadata>
+${waypointXml}
+  <rte>
+    <name>${escapeXml(name)}</name>
+${routePoints}
+  </rte>
+</gpx>
+`;
+}
+
+export function downloadRouteGpx(route: RouteResponse, waypoints: Waypoint[], name: string) {
+  if (typeof window === 'undefined' || route.coordinates.length < 2) return;
+  const blob = new Blob([buildRouteGpx(route, waypoints, name)], { type: 'application/gpx+xml' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `${name.replace(/[^\w.-]+/g, '-').toLowerCase()}.gpx`;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

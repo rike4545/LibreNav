@@ -101,7 +101,7 @@ const MANEUVER_KINDS: Record<number, ManeuverKind> = {
  * forbidding. Each mode takes a different option bag — sending `auto` keys
  * under `bicycle` is simply ignored, which would make the toggles look broken.
  */
-function buildCostingOptions(options: RouteOptions) {
+export function buildCostingOptions(options: RouteOptions) {
   switch (options.mode) {
     case 'bicycle':
       return {

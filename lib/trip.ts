@@ -26,6 +26,8 @@ export function encodeTrip(waypoints: Waypoint[], options: RouteOptions): string
     .join('|');
 
   params.set('trip', trip);
+  const lockedStops = waypoints.map((point, index) => point.locked ? index : -1).filter((index) => index >= 0);
+  if (lockedStops.length) params.set('locks', lockedStops.join(','));
 
   if (options.mode !== 'auto') params.set('mode', options.mode);
 
@@ -64,6 +66,7 @@ export function decodeTrip(search: string): { waypoints: Waypoint[]; options: Ro
     };
   }
 
+  const lockedIndexes = new Set((params.get('locks') ?? '').split(',').map(Number).filter((value) => Number.isInteger(value) && value >= 0));
   const waypoints = raw
     .split('|')
     .map((chunk, index): Waypoint | null => {
@@ -78,7 +81,8 @@ export function decodeTrip(search: string): { waypoints: Waypoint[]; options: Ro
         id: `shared-${index}-${lat},${lng}`,
         name: name || `Stop ${index + 1}`,
         label: `${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-        coordinate: { lat, lng }
+        coordinate: { lat, lng },
+        locked: lockedIndexes.has(index)
       };
     })
     .filter((value): value is Waypoint => value !== null);

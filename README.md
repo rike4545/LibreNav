@@ -88,7 +88,10 @@ Built with Next.js, TypeScript, Tailwind, and MapLibre GL JS, routed by Valhalla
 - Drive history with distance, duration, and average speed
 
 **Trip planning**
-- Multi-stop routing with reorder and remove
+- Multi-stop routing with reorder, remove, and locked stops
+- Optional Valhalla stop-order optimization that preserves origin, destination, and locked stops
+- Named itineraries saved locally, restorable later, and exportable as GPX with named waypoints
+- Intermediate-stop arrival announcements while guidance continues to the next stop
 - Alternate routes, selectable from the sheet or by tapping the line on the map
 - Route preferences: avoid tolls, highways, or ferries; prefer scenic roads
 - Share links that restore the entire trip — every stop and preference, not just a destination pin

@@ -13,6 +13,7 @@ type Props = {
   imperial: boolean;
   voiceOn: boolean;
   rerouting: boolean;
+  nextStop?: string;
   onToggleVoice: () => void;
   onStop: () => void;
   onCancel: () => void;
@@ -23,7 +24,7 @@ type Props = {
   banner?: React.ReactNode;
 };
 
-export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rerouting, onToggleVoice, onStop, onCancel, banner }: Props) {
+export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rerouting, nextStop, onToggleVoice, onStop, onCancel, banner }: Props) {
   const step = progress ? route.maneuvers[progress.stepIndex] : route.maneuvers[0];
   const next = progress ? route.maneuvers[progress.stepIndex + 1] : route.maneuvers[1];
   if (!step) return null;
@@ -135,6 +136,8 @@ export function NavPanel({ route, progress, userPosition, imperial, voiceOn, rer
           ) : null}
         </div>
       ) : null}
+
+      {nextStop ? <div className="pointer-events-auto max-w-2xl truncate rounded-full border border-line bg-surface/95 px-4 py-2 text-sm text-muted shadow-panel"><span className="mr-2 text-xs font-semibold uppercase tracking-wider text-subtle">Next stop</span><span className="font-medium text-fg">{nextStop}</span></div> : null}
 
       {banner}
     </div>
