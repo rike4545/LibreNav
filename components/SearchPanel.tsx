@@ -187,7 +187,12 @@ export function SearchPanel({
         });
     }, 280);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // Abort immediately on the next keystroke or unmount, not after the
+      // next debounce window. Otherwise an older response can briefly win.
+      abortRef.current?.abort();
+    };
   }, [query, anchor]);
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
