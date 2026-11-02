@@ -26,6 +26,8 @@ export function encodeTrip(waypoints: Waypoint[], options: RouteOptions): string
     .join('|');
 
   params.set('trip', trip);
+  const lockedStops = waypoints.map((point, index) => point.locked ? index : -1).filter((index) => index >= 0);
+  if (lockedStops.length) params.set('locks', lockedStops.join(','));
 
   if (options.mode !== 'auto') params.set('mode', options.mode);
 

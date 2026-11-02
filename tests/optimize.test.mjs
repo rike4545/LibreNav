@@ -36,7 +36,7 @@ test('optimizer keeps origin and destination and applies Valhalla original index
     }) };
   });
   const result = await optimizeWaypoints(points, options);
-  assert.deepEqual(result.map((point) => point.id), ['A', 'D', 'B', 'C', 'E']);
+  assert.equal(result.map((point) => point.id).join(','), 'A,D,B,C,E');
 });
 
 test('locked stops partition optimization and remain in their exact position', async () => {
@@ -51,7 +51,7 @@ test('locked stops partition optimization and remain in their exact position', a
   const locked = points.map((point) => ({ ...point }));
   locked[3].locked = true;
   const result = await optimizeWaypoints(locked, options);
-  assert.deepEqual(result.map((point) => point.id), ['A', 'B', 'C', 'D', 'E']);
+  assert.equal(result.map((point) => point.id).join(','), 'A,B,C,D,E');
   assert.deepEqual(calls, [4]);
 });
 
