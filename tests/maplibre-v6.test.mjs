@@ -33,3 +33,11 @@ test('user marker ref is narrowed before its DOM element is accessed', async () 
   assert.ok(source.includes('if (!userMarker) return;'));
   assert.ok(source.includes("userMarker.getElement().querySelector<HTMLElement>('.nav-user-cone')"));
 });
+
+test('MapLibre v6 worker is explicitly bundled for Next.js before map creation', async () => {
+  const source = await read('components/NavMap.tsx');
+  const workerSetup = source.indexOf("maplibregl.setWorkerUrl(new URL('maplibre-gl/dist/maplibre-gl-worker.mjs', import.meta.url).toString())");
+  const mapCreation = source.indexOf('new maplibregl.Map(');
+  assert.ok(workerSetup >= 0, 'MapLibre v6 worker URL must be configured');
+  assert.ok(mapCreation > workerSetup, 'worker must be configured before the first map instance');
+});

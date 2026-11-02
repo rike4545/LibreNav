@@ -4,6 +4,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import * as maplibregl from 'maplibre-gl';
 import type { GeoJSONSource, LngLatBoundsLike, Map, MapMouseEvent, MapSourceDataEvent, MapTouchEvent, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+
+// MapLibre GL JS v6 ships its renderer in a separate module worker. Next.js
+// rewrites this package URL to the emitted, hashed same-origin asset; without
+// an explicit URL the bundled app can silently render a blank basemap.
+maplibregl.setWorkerUrl(new URL('maplibre-gl/dist/maplibre-gl-worker.mjs', import.meta.url).toString());
 import { TERRAIN_DEM_URL, appEnv, getGoogleMapsKey, googleMapTypeFor, resolveMapStyle } from '@/lib/config';
 import { CreditRun, EMPTY_CREDIT, MapCredit, parseAttribution, sameCredit } from '@/lib/attribution';
 import { GOOGLE_PROTOCOL, fetchGoogleCopyright, googleTileProtocol } from '@/lib/services/googleTiles';
