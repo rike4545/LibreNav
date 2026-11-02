@@ -66,6 +66,7 @@ import { hasLocalDataKey } from '@/lib/services/localdata';
 import { LoopError, generateLoop } from '@/lib/services/loops';
 import { fetchSpeedLimits, limitAtIndex } from '@/lib/services/roadinfo';
 import { RoutingError, fetchRoute } from '@/lib/services/routing';
+import { TripOptimizationError, optimizeWaypoints } from '@/lib/services/optimize';
 import {
   Preferences,
   SavedPlace,
@@ -76,6 +77,9 @@ import {
   getReports,
   getRouteOptions,
   getSavedPlaces,
+  getSavedItineraries,
+  saveItinerary,
+  deleteItinerary,
   getVehicle,
   clearTrips,
   getTrips,
@@ -91,8 +95,8 @@ import {
   toggleSavedPlace
 } from '@/lib/storage';
 import { emitToHost, listenToHost, readEmbedConfig, routeEvent, stopsToWaypoints } from '@/lib/embed';
-import { downloadGpx, trackDistanceKm } from '@/lib/gpx';
-import type { TripRecord } from '@/lib/storage';
+import { downloadGpx, downloadRouteGpx, trackDistanceKm } from '@/lib/gpx';
+import type { SavedItinerary, TripRecord } from '@/lib/storage';
 import { estimateTrafficDelay } from '@/lib/traffic';
 import { ChargePlanError, chargersToWaypoints, planChargingStops } from '@/lib/services/chargeplan';
 import { ElevationProfile, climbEnergyKwh, fetchElevationProfile } from '@/lib/services/elevation';
@@ -258,6 +262,8 @@ export function MapShell() {
   const [track, setTrack] = useState<TrackPoint[]>([]);
   const [recording, setRecording] = useState(false);
   const [trips, setTrips] = useState<TripRecord[]>([]);
+  const [savedItineraries, setSavedItineraries] = useState<SavedItinerary[]>([]);
+  const [optimizingTrip, setOptimizingTrip] = useState(false);
   const [loopKm, setLoopKm] = useState(40);
   const [loopBusy, setLoopBusy] = useState(false);
   const loopRotationRef = useRef(0);
@@ -294,6 +300,8 @@ export function MapShell() {
   const announcedRef = useRef(new Set<string>());
   const offRouteCountRef = useRef(0);
   const routeAbortRef = useRef<AbortController | null>(null);
+  const optimizeAbortRef = useRef<AbortController | null>(null);
+  const completedStopsRef = useRef(new Set<string>());
   const pendingDestinationRef = useRef<Waypoint | null>(null);
   const warnedNoOriginRef = useRef(false);
   const lastChargerFetchRef = useRef<Coordinate | null>(null);
@@ -382,6 +390,7 @@ export function MapShell() {
     setRecents(getRecents());
     setReports(getReports());
     setTrips(getTrips());
+    setSavedItineraries(getSavedItineraries());
   }, []);
 
   /* ------------------------------------------------------- geolocation */
@@ -487,6 +496,7 @@ export function MapShell() {
     )
       .then((result) => {
         setRoute(result);
+        completedStopsRef.current.clear();
         setActiveAlternativeId(null);
         navIndexRef.current = buildNavIndex(result);
         shapeHintRef.current = 0;
@@ -509,6 +519,8 @@ export function MapShell() {
     // stopsKey stands in for the waypoint coordinates.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stopsKey, options]);
+
+  useEffect(() => () => optimizeAbortRef.current?.abort(), [stopsKey, options]);
 
   /* ------------------------------- road data for the current route */
   useEffect(() => {
@@ -762,6 +774,17 @@ export function MapShell() {
      *
      * 30 m matches the iPhone app, so the two agree on when a trip is done.
      */
+    for (let stopIndex = 1; stopIndex < waypoints.length - 1; stopIndex += 1) {
+      const boundary = route.legs[stopIndex]?.startShapeIndex;
+      const stop = waypoints[stopIndex];
+      if (boundary !== undefined && next.shapeIndex >= boundary && haversineMeters(userPosition.coordinate, stop.coordinate) <= ARRIVAL_M * 2 && !completedStopsRef.current.has(stop.id)) {
+        completedStopsRef.current.add(stop.id);
+        const following = waypoints[stopIndex + 1];
+        if (preferences.voiceGuidance) speak('Arrived at ' + stop.name + '. Continue to ' + following.name + '.', { interrupt: true });
+        showToast('Stop ' + stopIndex + ' of ' + (waypoints.length - 2) + ': ' + stop.name);
+      }
+    }
+
     if (!arrivedRef.current && next.remainingDistanceM <= ARRIVAL_M) {
       arrivedRef.current = true;
       if (preferences.voiceGuidance) speak('You have arrived.', { interrupt: true });
@@ -808,7 +831,7 @@ export function MapShell() {
     // is current, and depending on it would re-enter the announcer between
     // ticks.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navActive, route, userPosition, preferences.voiceGuidance, preferences.imperial, rerouting]);
+  }, [navActive, route, userPosition, preferences.voiceGuidance, preferences.imperial, rerouting, waypoints, destination, embed, showToast]);
 
   /* --------------------------------------------------------- rerouting */
   useEffect(() => {
@@ -827,7 +850,7 @@ export function MapShell() {
         coordinate: userPosition.coordinate,
         isCurrentLocation: true
       },
-      ...current.slice(1)
+      ...current.slice(1).filter((point) => !completedStopsRef.current.has(point.id))
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [progress, navActive, userPosition]);
@@ -977,6 +1000,10 @@ export function MapShell() {
     });
   }, []);
 
+  const toggleWaypointLock = useCallback((id: string) => {
+    setWaypoints((current) => current.map((point, index) => index === 0 || index === current.length - 1 || point.id !== id ? point : { ...point, locked: !point.locked }));
+  }, []);
+
   const moveWaypoint = useCallback((id: string, direction: -1 | 1) => {
     setWaypoints((current) => {
       const index = current.findIndex((point) => point.id === id);
@@ -988,6 +1015,50 @@ export function MapShell() {
     });
   }, []);
 
+  async function optimizeTrip() {
+    if (waypoints.length < 4 || optimizingTrip) return;
+    optimizeAbortRef.current?.abort();
+    const controller = new AbortController();
+    optimizeAbortRef.current = controller;
+    const snapshot = waypoints;
+    setOptimizingTrip(true);
+    try {
+      const optimized = await optimizeWaypoints(snapshot, options, controller.signal);
+      if (controller.signal.aborted) return;
+      if (optimized.every((point, index) => point.id === snapshot[index]?.id)) showToast('The current stop order is already optimal, or locked stops leave no section to reorder.');
+      else { setWaypoints(optimized); showToast('Trip order optimized. Origin, destination, and locked stops were preserved.'); }
+    } catch (cause) {
+      if (controller.signal.aborted || (cause as Error).name === 'AbortError') return;
+      showToast(cause instanceof TripOptimizationError ? cause.message : 'Could not optimize this trip.');
+    } finally {
+      if (optimizeAbortRef.current === controller) setOptimizingTrip(false);
+    }
+  }
+
+  function saveCurrentItinerary() {
+    if (waypoints.length < 2) return;
+    const name = 'Trip to ' + waypoints[waypoints.length - 1].name;
+    const record: SavedItinerary = { id: 'itinerary-' + Date.now(), name, waypoints: waypoints.map((point) => ({ ...point })), options: { ...options }, savedAt: new Date().toISOString() };
+    setSavedItineraries(saveItinerary(record));
+    showToast('Trip saved on this device.');
+  }
+
+  function loadItinerary(itinerary: SavedItinerary) {
+    optimizeAbortRef.current?.abort();
+    setNavActive(false);
+    arrivedRef.current = false;
+    completedStopsRef.current.clear();
+    setWaypoints(itinerary.waypoints.map((point) => ({ ...point })));
+    setOptions(saveRouteOptions(itinerary.options));
+    setPanelOpen(false);
+    showToast('Loaded ' + itinerary.name);
+  }
+
+  function exportPlannedRoute() {
+    if (!route || waypoints.length < 2) return;
+    downloadRouteGpx(route, waypoints, 'LibreNav ' + waypoints[waypoints.length - 1].name);
+    showToast('Route and named stops exported as GPX.');
+  }
   const handleCategory = useCallback(
     (category: PlaceCategoryId | null, alongRoute: boolean) => {
       categoryAbortRef.current?.abort();
@@ -1488,6 +1559,7 @@ export function MapShell() {
 
       {navActive && route ? (
         <NavPanel
+          nextStop={waypoints.find((point, index) => index > 0 && index < waypoints.length - 1 && !completedStopsRef.current.has(point.id))?.name ?? destination?.name}
           route={route}
           progress={progress}
           userPosition={userPosition}
@@ -1742,11 +1814,19 @@ export function MapShell() {
               categoryResults={places}
               activeCategory={activeCategory}
               hasRoute={Boolean(route)}
+              savedItineraries={savedItineraries}
+              optimizingTrip={optimizingTrip}
               onOptionsChange={(next) => setOptions(saveRouteOptions(next))}
               onSetDestination={setDestination}
               onAddStop={addStop}
               onRemoveWaypoint={removeWaypoint}
               onMoveWaypoint={moveWaypoint}
+              onToggleWaypointLock={toggleWaypointLock}
+              onOptimizeTrip={() => void optimizeTrip()}
+              onSaveItinerary={saveCurrentItinerary}
+              onLoadItinerary={loadItinerary}
+              onDeleteItinerary={(id) => setSavedItineraries(deleteItinerary(id))}
+              onExportRoute={exportPlannedRoute}
               onToggleSaved={(feature) => setSaved(toggleSavedPlace(feature))}
               onSetRole={(id, role) => setSaved(setPlaceRole(id, role))}
               onCategorySelect={handleCategory}

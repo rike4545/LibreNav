@@ -221,6 +221,8 @@ export type Waypoint = {
   coordinate: Coordinate;
   /** True when this stop tracks live GPS rather than a fixed point. */
   isCurrentLocation?: boolean;
+  /** Keep this stop in its current position when optimizing the trip. */
+  locked?: boolean;
 };
 
 export type VehicleProfile = {

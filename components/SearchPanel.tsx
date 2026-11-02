@@ -5,6 +5,8 @@ import {
   ArrowDown,
   ArrowUp,
   Briefcase,
+  Bookmark,
+  Download,
   ChevronDown,
   Clock3,
   Coffee,
@@ -13,6 +15,7 @@ import {
   Fuel,
   Home,
   Loader2,
+  Lock,
   MapPin,
   ParkingSquare,
   Plus,
@@ -26,13 +29,14 @@ import {
   Star,
   Toilet,
   Trash2,
+  Unlock,
   X,
   Zap
 } from 'lucide-react';
 import { PLACE_CATEGORIES } from '@/lib/services/overpass';
 import { searchPlaces } from '@/lib/services/geocode';
 import { hasLocalDataKey, searchBusinesses } from '@/lib/services/localdata';
-import { SavedPlace } from '@/lib/storage';
+import { SavedItinerary, SavedPlace } from '@/lib/storage';
 import { bearingCompass } from '@/lib/format';
 import { cn, formatDistanceKm } from '@/lib/utils';
 import { Coordinate, Place, PlaceCategoryId, RouteOptions, SearchFeature, TravelMode, Waypoint } from '@/types/map';
@@ -51,11 +55,19 @@ type Props = {
   categoryResults: Place[];
   activeCategory: PlaceCategoryId | null;
   hasRoute: boolean;
+  savedItineraries: SavedItinerary[];
+  optimizingTrip: boolean;
   onOptionsChange: (options: RouteOptions) => void;
   onSetDestination: (feature: SearchFeature) => void;
   onAddStop: (feature: SearchFeature) => void;
   onRemoveWaypoint: (id: string) => void;
   onMoveWaypoint: (id: string, direction: -1 | 1) => void;
+  onToggleWaypointLock: (id: string) => void;
+  onOptimizeTrip: () => void;
+  onSaveItinerary: () => void;
+  onLoadItinerary: (itinerary: SavedItinerary) => void;
+  onDeleteItinerary: (id: string) => void;
+  onExportRoute: () => void;
   onToggleSaved: (feature: SearchFeature) => void;
   onSetRole: (id: string, role: 'home' | 'work' | null) => void;
   onCategorySelect: (category: PlaceCategoryId | null, alongRoute: boolean) => void;
@@ -100,11 +112,19 @@ export function SearchPanel({
   categoryResults,
   activeCategory,
   hasRoute,
+  savedItineraries,
+  optimizingTrip,
   onOptionsChange,
   onSetDestination,
   onAddStop,
   onRemoveWaypoint,
   onMoveWaypoint,
+  onToggleWaypointLock,
+  onOptimizeTrip,
+  onSaveItinerary,
+  onLoadItinerary,
+  onDeleteItinerary,
+  onExportRoute,
   onToggleSaved,
   onSetRole,
   onCategorySelect,
@@ -378,6 +398,17 @@ export function SearchPanel({
                     </div>
                     <button
                       type="button"
+                      disabled={index === 0 || index === waypoints.length - 1}
+                      onClick={() => onToggleWaypointLock(waypoint.id)}
+                      aria-label={waypoint.locked ? `Unlock ${waypoint.name} for optimization` : `Keep ${waypoint.name} in place`}
+                      aria-pressed={Boolean(waypoint.locked)}
+                      title={waypoint.locked ? 'Stop locked in place' : 'Lock stop in place'}
+                      className="shrink-0 rounded p-1 text-subtle hover:bg-strong disabled:opacity-25"
+                    >
+                      {waypoint.locked ? <Lock className="h-3.5 w-3.5 text-amber-400" /> : <Unlock className="h-3.5 w-3.5" />}
+                    </button>
+                    <button
+                      type="button"
                       disabled={index === 0}
                       onClick={() => onMoveWaypoint(waypoint.id, -1)}
                       aria-label={`Move ${waypoint.name} earlier`}
@@ -405,6 +436,25 @@ export function SearchPanel({
                   </div>
                 ))}
               </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                {waypoints.length >= 4 ? (
+                  <button type="button" onClick={onOptimizeTrip} disabled={optimizingTrip || !['auto', 'bicycle', 'pedestrian'].includes(options.mode)} title={!['auto', 'bicycle', 'pedestrian'].includes(options.mode) ? 'Optimization supports drive, bike, and walk modes' : 'Locked stops divide the trip into independently optimized sections'} className="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-sm font-semibold text-fg hover:bg-strong disabled:opacity-50">
+                    {optimizingTrip ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                    {optimizingTrip ? 'Optimizing…' : 'Optimize order'}
+                  </button>
+                ) : <div className="flex items-center text-xs text-subtle">Add 2+ intermediate stops to optimize.</div>}
+                <button type="button" onClick={onSaveItinerary} disabled={waypoints.length < 2} className="flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-3 py-2.5 text-sm font-semibold text-fg hover:bg-strong disabled:opacity-50"><Bookmark className="h-4 w-4" /> Save trip</button>
+                {hasRoute ? <button type="button" onClick={onExportRoute} className="col-span-2 flex items-center justify-center gap-2 rounded-xl border border-line bg-surface px-3 py-2 text-sm font-medium text-muted hover:bg-strong"><Download className="h-4 w-4" /> Export route as GPX</button> : null}
+              </div>
+              {savedItineraries.length ? <div className="mt-3 border-t border-line pt-3">
+                <div className="mb-2 text-xs font-semibold uppercase tracking-[0.18em] text-subtle">Saved trips</div>
+                <div className="space-y-1.5">
+                  {savedItineraries.slice(0, 8).map((itinerary) => <div key={itinerary.id} className="flex items-center gap-2 rounded-xl bg-raised px-3 py-2">
+                    <button type="button" onClick={() => onLoadItinerary(itinerary)} className="min-w-0 flex-1 text-left"><span className="block truncate text-sm font-medium text-fg">{itinerary.name}</span><span className="block text-xs text-subtle">{itinerary.waypoints.length} stops · {new Date(itinerary.savedAt).toLocaleDateString()}</span></button>
+                    <button type="button" onClick={() => onDeleteItinerary(itinerary.id)} aria-label={'Delete saved trip ' + itinerary.name} className="rounded p-1 text-subtle hover:bg-strong hover:text-rose-300"><Trash2 className="h-4 w-4" /></button>
+                  </div>)}
+                </div>
+              </div> : null}
             </section>
           ) : null}
 
