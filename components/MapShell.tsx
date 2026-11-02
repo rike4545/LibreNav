@@ -239,7 +239,7 @@ export function MapShell() {
   const [jams, setJams] = useState<TrafficJam[]>([]);
   const [trafficThrottled, setTrafficThrottled] = useState(false);
   const [trafficUnavailable, setTrafficUnavailable] = useState(false);
-  const [weatherUnavailable, setWeatherUnavailable] = useState(false);
+  const [weatherUnavailableFor, setWeatherUnavailableFor] = useState<string | null>(null);
   const [weather, setWeather] = useState<StopWeather | null>(null);
   /** Target arrival "HH:MM" for departure planning; null means "leaving now". */
   const [targetArrival, setTargetArrival] = useState<string | null>(null);
@@ -300,6 +300,11 @@ export function MapShell() {
   const announcedAlertsRef = useRef(new Set<string>());
 
   const destination = waypoints.length > 1 ? waypoints[waypoints.length - 1] : null;
+  const weatherRequestKey =
+    route && destination
+      ? [destination.id, targetArrival ?? 'now', route.summary.distanceKm, route.summary.durationMin].join(':')
+      : null;
+  const weatherUnavailable = weatherRequestKey !== null && weatherUnavailableFor === weatherRequestKey;
 
   /** Plus Code for the destination, computed locally — no lookup involved. */
   const destinationPlusCode = destination ? encodePlusCode(destination.coordinate) : null;
@@ -1046,7 +1051,7 @@ export function MapShell() {
    * screen so you can restart or review it, whereas this clears the plan.
    */
   function clearRoute() {
-    setWeatherUnavailable(false);
+    setWeatherUnavailableFor(null);
     setSpeedLimitsUnavailable(false);
     setCamerasUnavailable(false);
     setElevationUnavailable(false);
@@ -1406,16 +1411,15 @@ export function MapShell() {
         ? plan.arrivalMs
         : Date.now() + (route.summary.durationMin + (trafficDelay?.seconds ?? 0) / 60) * 60_000;
 
-    setWeatherUnavailable(false);
     fetchWeatherAt(destination.coordinate, arrival, controller.signal)
       .then((forecast) => {
         setWeather(forecast);
-        setWeatherUnavailable(false);
+        setWeatherUnavailableFor(null);
       })
       .catch((error: Error) => {
         if (controller.signal.aborted || error.name === 'AbortError') return;
         setWeather(null);
-        setWeatherUnavailable(true);
+        setWeatherUnavailableFor(weatherRequestKey);
       });
 
     // Dropping the old forecast belongs here rather than in the guard above:
@@ -1430,7 +1434,7 @@ export function MapShell() {
     // Re-fetching on every traffic tick would be wasteful; the route and the
     // planned arrival are what actually change the answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, destination?.id, targetArrival]);
+  }, [route, destination?.id, targetArrival, weatherRequestKey]);
 
   /* ------------------------------------------------ route out to the host */
   /**
