@@ -639,6 +639,8 @@ export function MapShell() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLiveAlerts([]);
       setJams([]);
+      setTrafficUnavailable(false);
+      setTrafficThrottled(false);
       return;
     }
 
@@ -656,6 +658,7 @@ export function MapShell() {
           setLiveAlerts(traffic.alerts);
           setJams(traffic.jams);
           setTrafficUnavailable(false);
+          setTrafficThrottled(false);
         })
         .catch((cause: Error) => {
           if (controller.signal.aborted || cause.name === 'AbortError') return;
