@@ -160,7 +160,7 @@ struct SearchSheet: View {
             }
             if model.waypoints.count >= 3 {
                 Button { Task { await model.optimizeStops() } } label: {
-                    Label(model.isOptimizingTrip ? "Optimizing stop order…" : "Optimize stop order", systemImage: "arrow.trianglehead.2.clockwise.rotate.90")
+                    Label(model.isOptimizingTrip ? "Optimizing stop order…" : "Optimize stop order", systemImage: "arrow.triangle.2.circlepath")
                         .font(.subheadline.weight(.semibold))
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 10)

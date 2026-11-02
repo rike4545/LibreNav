@@ -66,10 +66,15 @@ final class MapModel {
     /// The last fix fed to the session, so a reroute starts from where the
     /// driver actually is rather than where the trip began.
     private var lastFix: CLLocationCoordinate2D?
+    private var completedWaypointIDs: Set<String> = []
 
     init() {
         nav.onNeedsReroute = { [weak self] in
             self?.reroute()
+        }
+        nav.onIntermediateStopArrived = { [weak self] id in
+            guard let self else { return }
+            self.completedWaypointIDs.insert(id)
         }
         location.onFix = { [weak self] coordinate, accuracy in
             self?.handleFix(coordinate, accuracy: accuracy)
@@ -90,6 +95,7 @@ final class MapModel {
     }
 
     func select(_ place: Place) {
+        completedWaypointIDs.removeAll()
         waypoints = [place]
         query = ""
         results = []
@@ -138,6 +144,7 @@ final class MapModel {
         routeTask?.cancel()
         stopNavigating()
         waypoints = []
+        completedWaypointIDs.removeAll()
         route = nil
         errorMessage = nil
     }
@@ -158,7 +165,8 @@ final class MapModel {
             return
         }
         location.isNavigating = true
-        nav.start(route: route, imperial: preferences.imperial)
+        completedWaypointIDs.removeAll()
+        nav.start(route: route, stops: waypoints.map { NavigationStop(id: $0.id, name: $0.name, coordinate: $0.coordinate) }, imperial: preferences.imperial)
     }
 
     func stopNavigating() {
@@ -188,10 +196,11 @@ final class MapModel {
         routeTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let fresh = try await self.router.route(stops: [from] + self.waypoints.map { $0.coordinate }, mode: self.mode)
+                let remaining = self.waypoints.filter { !self.completedWaypointIDs.contains($0.id) }
+                let fresh = try await self.router.route(stops: [from] + remaining.map { $0.coordinate }, mode: self.mode)
                 guard !Task.isCancelled else { return }
                 self.route = fresh
-                self.nav.start(route: fresh, imperial: self.preferences.imperial)
+                self.nav.start(route: fresh, stops: remaining.map { NavigationStop(id: $0.id, name: $0.name, coordinate: $0.coordinate) }, imperial: self.preferences.imperial)
             } catch {
                 // Keep guiding on the old line rather than dropping the driver
                 // mid-trip; the next off-route run will try again.

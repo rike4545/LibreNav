@@ -109,9 +109,11 @@ struct ValhallaClient {
 
         var coordinates: [CLLocationCoordinate2D] = []
         var maneuvers: [Maneuver] = []
+        var legStartShapeIndices: [Int] = []
 
         for leg in legs {
             let offset = coordinates.count
+            legStartShapeIndices.append(offset)
             if let shape = leg["shape"] as? String {
                 coordinates.append(contentsOf: Polyline.decode(shape))
             }
@@ -144,7 +146,8 @@ struct ValhallaClient {
                 durationMin: (summary?["time"] as? Double ?? 0) / 60,
                 hasToll: summary?["has_toll"] as? Bool ?? false,
                 hasFerry: summary?["has_ferry"] as? Bool ?? false
-            )
+            ),
+            legStartShapeIndices: legStartShapeIndices
         )
     }
 }
