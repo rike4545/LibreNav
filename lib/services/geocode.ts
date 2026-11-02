@@ -35,6 +35,12 @@ function toFeature(feature: PhotonFeature, index: number): SearchFeature | null 
   const [lng, lat] = coords;
   if (typeof lng !== 'number' || typeof lat !== 'number') return null;
 
+  // Treat external GeoJSON as untrusted input. MapLibre and distance/bearing
+  // calculations require finite WGS84 coordinates; malformed service results
+  // should be discarded rather than rendered or propagated through the app.
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return null;
+  if (lng < -180 || lng > 180 || lat < -90 || lat > 90) return null;
+
   const props = feature.properties ?? {};
   const street = [props.housenumber, props.street].filter(Boolean).join(' ');
   const name = props.name || street || props.city || props.state || `Result ${index + 1}`;

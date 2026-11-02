@@ -47,6 +47,7 @@ type Props = {
   options: RouteOptions;
   imperial: boolean;
   categoryLoading: PlaceCategoryId | null;
+  categoryError: string | null;
   categoryResults: Place[];
   activeCategory: PlaceCategoryId | null;
   hasRoute: boolean;
@@ -95,6 +96,7 @@ export function SearchPanel({
   options,
   imperial,
   categoryLoading,
+  categoryError,
   categoryResults,
   activeCategory,
   hasRoute,
@@ -187,7 +189,12 @@ export function SearchPanel({
         });
     }, 280);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // Abort immediately on the next keystroke or unmount, not after the
+      // next debounce window. Otherwise an older response can briefly win.
+      abortRef.current?.abort();
+    };
   }, [query, anchor]);
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
@@ -310,6 +317,12 @@ export function SearchPanel({
             </button>
           ) : null}
 
+          {activeCategory && categoryError ? (
+            <p role="alert" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-fg">{categoryError}</p>
+          ) : null}
+          {activeCategory && !categoryLoading && !categoryError && !categoryResults.length ? (
+            <p role="status" aria-live="polite" className="mt-3 text-xs text-subtle">No places found for this category in the selected area.</p>
+          ) : null}
           {activeCategory && categoryResults.length ? (
             <div className="mt-3 space-y-1.5">
               {categoryResults.slice(0, 12).map((place) => (
