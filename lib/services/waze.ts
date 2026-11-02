@@ -88,7 +88,7 @@ export async function fetchWazeTraffic(
 
     try {
       const response = await fetch(url, { headers: { 'x-api-key': key }, signal: combined });
-      if (response.status === 401 || response.status === 403) return EMPTY;
+      if (response.status === 401 || response.status === 403) throw new WazeServiceError('Live traffic key was rejected. Check it in Settings.');
 
       // This endpoint is metered per call. Retrying a 429 just spends more of
       // the user's quota, so back off for a while instead.
@@ -104,12 +104,20 @@ export async function fetchWazeTraffic(
 
       return { alerts: parseAlerts(payload.data.alerts ?? []), jams: parseJams(payload.data.jams ?? []) };
     } catch (error) {
-      if (error instanceof WazeThrottled) throw error;
+      if (error instanceof WazeThrottled || error instanceof WazeServiceError) throw error;
       if (signal?.aborted) throw error;
     }
   }
 
-  return EMPTY;
+  throw new WazeServiceError('Live traffic service is unavailable right now.');
+}
+
+/** Raised when the live traffic provider cannot return a trustworthy response. */
+export class WazeServiceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'WazeServiceError';
+  }
 }
 
 /** Raised when the account's quota is exhausted, so callers can say so. */

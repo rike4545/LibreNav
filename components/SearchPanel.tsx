@@ -47,6 +47,7 @@ type Props = {
   options: RouteOptions;
   imperial: boolean;
   categoryLoading: PlaceCategoryId | null;
+  categoryError: string | null;
   categoryResults: Place[];
   activeCategory: PlaceCategoryId | null;
   hasRoute: boolean;
@@ -95,6 +96,7 @@ export function SearchPanel({
   options,
   imperial,
   categoryLoading,
+  categoryError,
   categoryResults,
   activeCategory,
   hasRoute,
@@ -147,8 +149,9 @@ export function SearchPanel({
       // Photon is the baseline and always runs; the business API only joins in
       // when the user has supplied their own key, and never blocks the result.
       const geocoded = searchPlaces(trimmed, { near: anchor, signal: controller.signal });
-      const businesses = hasLocalDataKey()
-        ? searchBusinesses(trimmed, { near: anchor, signal: controller.signal }).catch(() => [])
+      const hasBusinessSearch = hasLocalDataKey();
+      const businesses = hasBusinessSearch
+        ? searchBusinesses(trimmed, { near: anchor, signal: controller.signal })
         : Promise.resolve([]);
 
       Promise.allSettled([geocoded, businesses])
@@ -156,6 +159,7 @@ export function SearchPanel({
           if (controller.signal.aborted) return;
           const places = geoResult.status === 'fulfilled' ? geoResult.value : [];
           const found = bizResult.status === 'fulfilled' ? bizResult.value : [];
+          const businessSearchFailed = hasBusinessSearch && bizResult.status === 'rejected';
 
           // Businesses lead: someone typing a place name usually wants the shop,
           // not the street it sits on.
@@ -170,14 +174,27 @@ export function SearchPanel({
 
           setResults(unique);
           if (unique.length) setError(null);
-          else setError(geoResult.status === 'rejected' ? 'Search is unavailable right now.' : 'No matches found.');
+          else if (geoResult.status === 'rejected' && businessSearchFailed) {
+            setError('Search services are unavailable right now.');
+          } else if (geoResult.status === 'rejected') {
+            setError('Place search is unavailable right now.');
+          } else if (businessSearchFailed) {
+            setError('Business search is unavailable right now. Place search returned no matches.');
+          } else {
+            setError('No matches found.');
+          }
         })
         .finally(() => {
           if (!controller.signal.aborted) setSearching(false);
         });
     }, 280);
 
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // Abort immediately on the next keystroke or unmount, not after the
+      // next debounce window. Otherwise an older response can briefly win.
+      abortRef.current?.abort();
+    };
   }, [query, anchor]);
 
   const savedIds = useMemo(() => new Set(saved.map((item) => item.id)), [saved]);
@@ -265,7 +282,7 @@ export function SearchPanel({
       ) : null}
 
       {error && query.trim().length >= 2 && !searching && !results.length ? (
-        <div className="border-t border-line px-4 py-3 text-sm text-subtle">{error}</div>
+        <div role="status" aria-live="polite" className="border-t border-line px-4 py-3 text-sm text-subtle">{error}</div>
       ) : null}
 
       {open ? (
@@ -276,6 +293,7 @@ export function SearchPanel({
                 key={category.id}
                 type="button"
                 onClick={() => onCategorySelect(activeCategory === category.id ? null : category.id, false)}
+                aria-pressed={activeCategory === category.id}
                 className={cn(
                   'flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition',
                   activeCategory === category.id
@@ -299,6 +317,12 @@ export function SearchPanel({
             </button>
           ) : null}
 
+          {activeCategory && categoryError ? (
+            <p role="alert" className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-fg">{categoryError}</p>
+          ) : null}
+          {activeCategory && !categoryLoading && !categoryError && !categoryResults.length ? (
+            <p role="status" aria-live="polite" className="mt-3 text-xs text-subtle">No places found for this category in the selected area.</p>
+          ) : null}
           {activeCategory && categoryResults.length ? (
             <div className="mt-3 space-y-1.5">
               {categoryResults.slice(0, 12).map((place) => (
@@ -388,6 +412,7 @@ export function SearchPanel({
             <button
               type="button"
               onClick={() => setShowOptions((value) => !value)}
+              aria-expanded={showOptions}
               className="flex w-full items-center justify-between text-xs font-semibold uppercase tracking-[0.2em] text-subtle hover:text-muted"
             >
               <span className="flex items-center gap-2">

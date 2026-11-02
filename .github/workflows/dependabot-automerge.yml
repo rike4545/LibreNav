@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
   pull-requests: write
+  checks: read
+  statuses: read
+
+concurrency:
+  group: dependabot-automerge-${{ github.event.workflow_run.pull_requests[0].number }}
+  cancel-in-progress: false
 
 jobs:
   merge:
@@ -16,38 +22,160 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.pull_requests[0] != null
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
-      - name: Verify pull request author
-        id: pr
+      - name: Verify Dependabot group, base, and commit
+        id: eligibility
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.workflow_run.pull_requests[0].number }}
+          CI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
         run: |
-          author="$(gh pr view "$PR_NUMBER" --json author --jq '.author.login')"
-          case "$author" in
-            dependabot|dependabot\[bot\]|app/dependabot) is_dependabot=true ;;
-            *) is_dependabot=false ;;
+          set -euo pipefail
+
+          # Use the REST payload rather than GraphQL field aliases so the
+          # eligibility check compares GitHub's canonical PR fields.
+          pr="$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}")"
+          author="$(jq -r '.user.login // ""' <<< "$pr")"
+          base="$(jq -r '.base.ref // ""' <<< "$pr")"
+          base_sha="$(jq -r '.base.sha // ""' <<< "$pr")"
+          head="$(jq -r '.head.ref // ""' <<< "$pr")"
+          head_sha="$(jq -r '.head.sha // ""' <<< "$pr")"
+          draft="$(jq -r '.draft // true' <<< "$pr")"
+          state="$(jq -r '.state // ""' <<< "$pr")"
+          main_sha="$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq '.object.sha')"
+
+          # Dependabot is configured to put only npm patch/minor updates in
+          # these two groups. Major upgrades and GitHub Actions updates are
+          # intentionally excluded.
+          case "$head" in
+            dependabot/npm_and_yarn/production-minor-and-patch-*|dependabot/npm_and_yarn/development-minor-and-patch-*) ;;
+            *)
+              echo "Skipping non-approved dependency branch: $head"
+              exit 0
+              ;;
           esac
-          echo "is_dependabot=$is_dependabot" >> "$GITHUB_OUTPUT"
+
+          if [[ "$author" != "dependabot[bot]" || "$base" != "main" || "$state" != "open" || "$draft" != "false" ]]; then
+            echo "Skipping PR that is not an open, non-draft Dependabot PR targeting main."
+            echo "author=$author base=$base state=$state draft=$draft"
+            exit 0
+          fi
+
+          if [[ "$base_sha" != "$main_sha" ]]; then
+            echo "Skipping PR based on an outdated main commit; fresh checks are required."
+            exit 0
+          fi
+
+          # A completed run is only relevant to the exact commit it tested.
+          if [[ "$head_sha" != "$CI_HEAD_SHA" ]]; then
+            echo "Skipping stale CI result: PR head $head_sha differs from tested commit $CI_HEAD_SHA."
+            exit 0
+          fi
+
+          echo "eligible=true" >> "$GITHUB_OUTPUT"
           echo "number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
 
-      - name: Fetch Dependabot metadata
-        if: steps.pr.outputs.is_dependabot == 'true'
-        id: metadata
-        uses: dependabot/fetch-metadata@v2
-        with:
-          github-token: "${{ github.token }}"
-          pull-request: ${{ steps.pr.outputs.number }}
-
-      - name: Merge low-risk dependency updates
-        if: >
-          steps.pr.outputs.is_dependabot == 'true' &&
-          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-           steps.metadata.outputs.update-type == 'version-update:semver-minor')
+      - name: Wait for CodeQL to finish successfully
+        if: steps.eligibility.outputs.eligible == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ steps.pr.outputs.number }}
+          CI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
         run: |
-          gh pr merge "$PR_NUMBER" --squash --delete-branch
+          set -euo pipefail
+          deadline=$((SECONDS + 1200))
+          codeql_status=""
+          codeql_conclusion=""
+
+          while (( SECONDS < deadline )); do
+            checks="$(gh api "repos/${GH_REPO}/commits/${CI_HEAD_SHA}/check-runs?per_page=100")"
+            codeql="$(jq -c '[.check_runs[] | select(.name == "Analyze JavaScript/TypeScript")] | sort_by(.started_at // .created_at) | last // empty' <<< "$checks")"
+
+            if [[ -n "$codeql" ]]; then
+              codeql_status="$(jq -r '.status // ""' <<< "$codeql")"
+              codeql_conclusion="$(jq -r '.conclusion // ""' <<< "$codeql")"
+
+              if [[ "$codeql_status" == "completed" ]]; then
+                if [[ "$codeql_conclusion" == "success" ]]; then
+                  echo "CodeQL passed for $CI_HEAD_SHA."
+                  break
+                fi
+
+                echo "CodeQL did not pass: $codeql_conclusion"
+                exit 1
+              fi
+            fi
+
+            sleep 10
+          done
+
+          if [[ "$codeql_status" != "completed" || "$codeql_conclusion" != "success" ]]; then
+            echo "Timed out waiting for a successful CodeQL result."
+            exit 1
+          fi
+
+      - name: Wait for all current PR checks
+        if: steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.eligibility.outputs.number }}
+        run: gh pr checks "$PR_NUMBER" --watch
+
+      - name: Recheck PR state and merge the tested commit
+        if: steps.eligibility.outputs.eligible == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ steps.eligibility.outputs.number }}
+          CI_HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          pr="$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}")"
+          author="$(jq -r '.user.login // ""' <<< "$pr")"
+          base="$(jq -r '.base.ref // ""' <<< "$pr")"
+          base_sha="$(jq -r '.base.sha // ""' <<< "$pr")"
+          head="$(jq -r '.head.ref // ""' <<< "$pr")"
+          head_sha="$(jq -r '.head.sha // ""' <<< "$pr")"
+          draft="$(jq -r '.draft // true' <<< "$pr")"
+          state="$(jq -r '.state // ""' <<< "$pr")"
+          main_sha="$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq '.object.sha')"
+
+          if [[ "$author" != "dependabot[bot]" || "$base" != "main" || "$state" != "open" || "$draft" != "false" ]]; then
+            echo "PR is no longer eligible; leaving it open."
+            exit 0
+          fi
+
+          case "$head" in
+            dependabot/npm_and_yarn/production-minor-and-patch-*|dependabot/npm_and_yarn/development-minor-and-patch-*) ;;
+            *)
+              echo "PR branch is no longer an approved dependency group; leaving it open."
+              exit 0
+              ;;
+          esac
+
+          if [[ "$base_sha" != "$main_sha" ]]; then
+            echo "main advanced while checks were running; leaving the PR open for fresh validation."
+            exit 0
+          fi
+
+          if [[ "$head_sha" != "$CI_HEAD_SHA" ]]; then
+            echo "PR head changed while checks were running; leaving it open for fresh validation."
+            exit 0
+          fi
+
+          result="$(gh api --method PUT "repos/${GH_REPO}/pulls/${PR_NUMBER}/merge" -f sha="$CI_HEAD_SHA" -f merge_method=squash)"
+          merged="$(jq -r '.merged // false' <<< "$result")"
+
+          if [[ "$merged" != "true" ]]; then
+            echo "GitHub did not confirm the merge: $result"
+            exit 1
+          fi
+
+          echo "Merged validated Dependabot PR #$PR_NUMBER at $CI_HEAD_SHA."

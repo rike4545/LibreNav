@@ -83,8 +83,20 @@ export async function planChargingStops(
   climbKwh: number,
   signal?: AbortSignal
 ): Promise<ChargePlan> {
-  if (vehicle.batteryKwh <= 0 || vehicle.consumptionKwh100km <= 0) {
-    throw new ChargePlanError('Set a battery size and consumption first.');
+  if (
+    !Number.isFinite(vehicle.batteryKwh) ||
+    !Number.isFinite(vehicle.consumptionKwh100km) ||
+    !Number.isFinite(vehicle.socPercent) ||
+    !Number.isFinite(vehicle.reservePercent) ||
+    !Number.isFinite(climbKwh) ||
+    vehicle.batteryKwh <= 0 ||
+    vehicle.consumptionKwh100km <= 0 ||
+    vehicle.socPercent < 0 ||
+    vehicle.socPercent > 100 ||
+    vehicle.reservePercent < 0 ||
+    vehicle.reservePercent > 100
+  ) {
+    throw new ChargePlanError('Set a valid battery size, consumption, state of charge, and reserve.');
   }
 
   const cumulative = cumulativeDistances(route.coordinates);

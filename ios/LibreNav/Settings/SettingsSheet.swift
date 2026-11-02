@@ -14,12 +14,10 @@ struct SettingsSheet: View {
         NavigationStack {
             Form {
                 Section("Display") {
-                    Picker("Theme", selection: $preferences.theme) {
-                        ForEach(ThemeChoice.allCases) { choice in
-                            Text(choice.label).tag(choice)
-                        }
-                    }
-                    .pickerStyle(.segmented)
+                    LabeledContent("Theme", value: "Automatic")
+                    Text("Follows your device’s light or dark appearance.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
 
                     Picker("Basemap", selection: $preferences.mapStyleID) {
                         ForEach(MapStyleOption.all) { style in

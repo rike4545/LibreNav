@@ -5,9 +5,10 @@ import { BatteryCharging, Coffee, Globe, History, KeyRound, Play, RotateCcw, Ser
 import { DEFAULT_ENDPOINTS, Endpoints, availableMapStyles, canonicalMapStyleId, getEndpoints, getGoogleMapsKey, getLocalDataKey, resetEndpoints, saveEndpoints, saveGoogleMapsKey, saveLocalDataKey } from '@/lib/config';
 import { resetGoogleSessions, verifyGoogleMapsKey } from '@/lib/services/googleTiles';
 import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
-import { Preferences, ThemeChoice, TripRecord } from '@/lib/storage';
+import { Preferences, TripRecord } from '@/lib/storage';
 import { VoiceSettings, getServerVoicesSnapshot, getVoicesSnapshot, onVoicesChanged, previewVoice, speechSupported } from '@/lib/voice';
 import { cn } from '@/lib/utils';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 import { VehicleProfile } from '@/types/map';
 
 type Props = {
@@ -43,6 +44,7 @@ export function SettingsPanel({
   // as state seeded in an effect — which also drops the extra render that the
   // seeding pass used to cost on open.
   const voices = useSyncExternalStore(onVoicesChanged, getVoicesSnapshot, getServerVoicesSnapshot);
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
 
   const [endpoints, setEndpoints] = useState<Endpoints>(() => getEndpoints());
   const [saved, setSaved] = useState(false);
@@ -101,9 +103,9 @@ export function SettingsPanel({
   // panel; without it the panel sizes to the whole safe area and loses its
   // header and its last row off the ends of a landscape screen.
   return (
-    <div className="flex max-h-[min(44rem,calc(var(--safe-h)-2rem))] w-[min(30rem,calc(var(--safe-w)-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-panel">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="settings-panel-title" tabIndex={-1} className="flex max-h-[min(44rem,calc(var(--safe-h)-2rem))] w-[min(30rem,calc(var(--safe-w)-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-panel">
       <header className="flex items-center justify-between border-b border-line px-5 py-4">
-        <h2 className="text-lg font-semibold text-fg">Settings</h2>
+        <h2 id="settings-panel-title" className="text-lg font-semibold text-fg">Settings</h2>
         <button type="button" onClick={onClose} aria-label="Close settings" className="rounded-full p-1.5 text-subtle hover:bg-strong hover:text-fg">
           <X className="h-5 w-5" />
         </button>
@@ -113,24 +115,9 @@ export function SettingsPanel({
         <Section title="Display" icon={<Globe className="h-4 w-4" />}>
           <div className="mb-3">
             <div className="text-xs font-medium text-muted">Theme</div>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {(['system', 'light', 'dark'] as ThemeChoice[]).map((choice) => (
-                <button
-                  key={choice}
-                  type="button"
-                  onClick={() => onPreferencesChange({ ...preferences, theme: choice })}
-                  aria-pressed={preferences.theme === choice}
-                  className={cn(
-                    'rounded-full border px-3 py-1.5 text-xs font-semibold capitalize transition',
-                    preferences.theme === choice
-                      ? 'border-sky-400 bg-sky-500/25 text-fg'
-                      : 'border-line bg-raised text-muted hover:bg-strong'
-                  )}
-                >
-                  {choice}
-                </button>
-              ))}
-            </div>
+            <p className="mt-2 text-xs text-muted">
+              Automatic — follows your device’s light or dark appearance.
+            </p>
           </div>
           <Toggle
             label="Imperial units"

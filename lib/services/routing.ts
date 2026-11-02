@@ -182,24 +182,44 @@ export async function fetchRoute(
     ...(excludePolygons?.length ? { exclude_polygons: excludePolygons } : {})
   };
 
+  const timeout = AbortSignal.timeout(20_000);
+  const requestSignal = signal ? AbortSignal.any([signal, timeout]) : timeout;
   let response: Response;
   try {
     response = await fetch(`${trimSlash(valhallaUrl)}/route`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal
+      signal: requestSignal
     });
   } catch (error) {
-    if ((error as Error).name === 'AbortError') throw error;
+    if (signal?.aborted) throw error;
+    if (timeout.aborted || (error as Error).name === 'TimeoutError') {
+      throw new RoutingError('The routing service took too long to respond. Please try again.');
+    }
     throw new RoutingError('Could not reach the routing service. Check your connection or endpoint settings.');
   }
 
-  const payload = (await response.json().catch(() => null)) as ValhallaResponse | null;
-
-  if (!response.ok || !payload || payload.error) {
-    throw new RoutingError(payload?.error || `Routing failed (HTTP ${response.status}).`);
+  let payload: ValhallaResponse | null;
+  try {
+    payload = (await response.json()) as ValhallaResponse;
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    if (timeout.aborted || (error as Error).name === 'TimeoutError') {
+      throw new RoutingError('The routing service took too long to respond. Please try again.');
+    }
+    payload = null;
   }
+
+  if (!response.ok) {
+    if (response.status === 429) throw new RoutingError('The routing service is busy. Wait a moment and try again.');
+    if (response.status >= 500) throw new RoutingError('The routing service is temporarily unavailable. Please try again shortly.');
+    throw new RoutingError(`Routing failed (HTTP ${response.status}). Check the stops and route settings.`);
+  }
+  if (!payload || typeof payload !== 'object') {
+    throw new RoutingError('The routing service returned an unreadable response. Please try again.');
+  }
+  if (payload.error) throw new RoutingError(payload.error);
 
   const primary = parseTrip(payload.trip);
   if (!primary) {
