@@ -8,7 +8,7 @@ no tracking. Everything you save stays in your own browser.
 
 **Live app: https://rike4545.github.io/LibreNav/**
 
-**Contribute:** [Contribution guide](CONTRIBUTING.md) · [Project roadmap](docs/ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Security policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Community metrics](docs/COMMUNITY_METRICS.md)
+**Contribute:** [Contribution guide](CONTRIBUTING.md) · [Accessibility audit](docs/ACCESSIBILITY_AUDIT.md) · [Project roadmap](docs/ROADMAP.md) · [Architecture](docs/ARCHITECTURE.md) · [Security policy](SECURITY.md) · [Code of Conduct](CODE_OF_CONDUCT.md) · [Community metrics](docs/COMMUNITY_METRICS.md)
 
 Bug reports and feature ideas are welcome through the [GitHub issue tracker](https://github.com/rike4545/LibreNav/issues).
 
@@ -176,7 +176,8 @@ rotating it would not help, because the replacement is equally visible. The key 
 in your browser's `localStorage`, and the app degrades to the keyless OSM stack without one.
 
 That endpoint is metered and can be slow. LibreNav polls it at most every three minutes, backs off
-for ten minutes on a quota error, and never lets it block navigation.
+for ten minutes on a quota error, preserves the last successful traffic response when refreshes fail,
+and never lets it block turn-by-turn navigation.
 
 ## Deploying
 

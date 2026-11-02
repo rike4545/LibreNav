@@ -1,31 +1,36 @@
 # Accessibility audit: navigation panels
 
-Audit date: 2026-10-16  
-Scope: source-level review of search, route preferences, and charger details. This is a focused pass, not a full WCAG conformance audit.
+Audit date: 2026-11-02  
+Scope: source-level review and automated regression contracts for search, route preferences, charger details, settings, layers, and reporting sheets. This is not a full WCAG conformance audit.
 
-## Changes in this pass
+## Source review completed
 
-- Search failures are announced in a polite live status region instead of being presented as an ordinary empty result.
-- Business-search failures are no longer swallowed into an empty array; the interface can distinguish a failed source from a successful search with no matches.
-- Route-preferences disclosure exposes its expanded state to assistive technology.
-- Category filter buttons expose their selected state with `aria-pressed`.
-- Icon-only actions reviewed in `SearchPanel.tsx` and `ChargerCard.tsx` have accessible names.
+- Search errors use a polite live status; category-service failures are distinguished from a successful empty category search.
+- Search/category requests are cancelled when superseded, preventing stale results from replacing the active selection.
+- Route-preferences disclosure exposes its expanded state; travel modes and category filters expose selected state.
+- Icon-only controls reviewed in SearchPanel and ChargerCard have accessible names.
+- Settings, layers, charger details, and report sheets use dialog semantics, move focus into the dialog, contain Tab/Shift+Tab navigation, close with Escape, and restore focus to the opener.
+- Global `:focus-visible` styling provides a consistent keyboard indicator, including controls with custom borders.
+- Reduced-motion preferences disable non-essential transitions and animations.
+- Toasts and service status messages are exposed to assistive technology.
+- Automated source-contract tests cover the dialog/focus hooks, status announcements, and reduced-motion styles.
 
 ## Manual verification checklist
 
-Run these checks in a browser before claiming a complete accessibility audit:
+These checks require an actual browser and assistive technology. They have **not** been marked complete by source inspection alone:
 
-- [ ] Keyboard only: tab to the destination search field, clear search, expand/collapse the panel, and select a result.
-- [ ] Keyboard only: open route preferences, change travel mode and filter chips, and reorder/remove waypoints.
+- [ ] Keyboard only: tab to destination search, clear it, expand/collapse the panel, and choose a result.
+- [ ] Keyboard only: open route preferences, change travel mode and category filters, and reorder/remove waypoints.
 - [ ] Keyboard only: open charger details, navigate to the charger, add a stop, and close the details card.
-- [ ] Screen reader: confirm search errors are announced and distinguish service failures from “No matches found.”
-- [ ] Screen reader: confirm route preferences announces expanded/collapsed and category filters announce pressed/unpressed state.
-- [ ] Confirm visible focus remains apparent against both raised and dark surfaces.
-- [ ] At narrow mobile widths and browser zoom, confirm controls remain reachable and do not create horizontal scrolling.
-- [ ] Test Escape and focus return for every modal/sheet entry point in the app.
+- [ ] Keyboard only: open Settings, Layers, and Report; verify initial focus, Tab/Shift+Tab containment, Escape, and focus restoration.
+- [ ] Screen reader: confirm search and category errors are announced and differ from successful empty results.
+- [ ] Screen reader: confirm dialog names, route-preferences expanded state, filter pressed state, and switch checked state.
+- [ ] Confirm visible focus remains apparent on light and dark themes at normal and high browser zoom.
+- [ ] At narrow mobile widths and browser zoom, confirm controls remain reachable without horizontal page scrolling.
+- [ ] Test VoiceOver on iOS Safari and at least one desktop screen reader/browser combination.
 
 ## Known gaps
 
-- This pass does not establish WCAG 2.2 AA conformance.
-- A full runtime audit of modal focus trapping/return, contrast ratios, reduced-motion behavior, and every navigation mode remains to be performed.
-- Manual browser and screen-reader checks have not been run from this repository-editing session; checkboxes above remain unchecked until verified.
+- Source inspection and automated contract tests do not establish WCAG 2.2 AA conformance.
+- Contrast ratios for every dynamic state, map canvas interaction, voice guidance, and all navigation modes still need runtime testing.
+- A manual browser and screen-reader session is required before closing issue #16. The focus-management implementation must also be checked on real mobile browsers, where virtual keyboards and touch exploration behave differently.
