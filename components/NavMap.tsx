@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import maplibregl, { GeoJSONSource, LngLatBoundsLike, Map, MapMouseEvent, Marker } from 'maplibre-gl';
+import * as maplibregl from 'maplibre-gl';
+import type { GeoJSONSource, LngLatBoundsLike, Map, MapMouseEvent, MapSourceDataEvent, MapTouchEvent, Marker } from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { TERRAIN_DEM_URL, appEnv, getGoogleMapsKey, googleMapTypeFor, resolveMapStyle } from '@/lib/config';
 import { CreditRun, EMPTY_CREDIT, MapCredit, parseAttribution, sameCredit } from '@/lib/attribution';
@@ -646,7 +647,7 @@ export function NavMap({
 
     map.on('styledata', publishCredit);
     map.on('terrain', publishCredit);
-    map.on('sourcedata', (event) => {
+    map.on('sourcedata', (event: MapSourceDataEvent) => {
       // Attribution arrives with the TileJSON, which is the 'metadata'
       // payload; the per-tile events that follow it can't change the credit,
       // and there is one of those for every tile on screen.
@@ -674,7 +675,7 @@ export function NavMap({
       if (pressTimer) clearTimeout(pressTimer);
       pressTimer = null;
     };
-    const startPress = (event: MapMouseEvent) => {
+    const startPress = (event: { lngLat: { lat: number; lng: number } }) => {
       clearPress();
       pressTimer = setTimeout(() => {
         handlersRef.current.onMapLongPress({ lat: event.lngLat.lat, lng: event.lngLat.lng });
@@ -684,10 +685,10 @@ export function NavMap({
     map.on('mousedown', startPress);
     map.on('mouseup', clearPress);
     map.on('dragstart', clearPress);
-    map.on('touchstart', (event) => startPress(event as unknown as MapMouseEvent));
+    map.on('touchstart', (event: MapTouchEvent) => startPress(event));
     map.on('touchend', clearPress);
     map.on('touchmove', clearPress);
-    map.on('contextmenu', (event) => {
+    map.on('contextmenu', (event: MapMouseEvent) => {
       handlersRef.current.onMapLongPress({ lat: event.lngLat.lat, lng: event.lngLat.lng });
     });
 
@@ -840,9 +841,13 @@ export function NavMap({
       userMarkerRef.current.setLngLat([point.lng, point.lat]);
     }
 
+    // Narrow the ref after creation/update; React refs remain nullable to TypeScript.
+    const userMarker = userMarkerRef.current;
+    if (!userMarker) return;
+
     // Point the heading cone along GPS heading, falling back to road course.
     const heading = userPosition?.heading ?? courseDeg;
-    const cone = userMarkerRef.current.getElement().querySelector<HTMLElement>('.nav-user-cone');
+    const cone = userMarker.getElement().querySelector<HTMLElement>('.nav-user-cone');
     if (cone) {
       cone.style.opacity = heading === null || heading === undefined ? '0' : '1';
       if (heading !== null && heading !== undefined) {
