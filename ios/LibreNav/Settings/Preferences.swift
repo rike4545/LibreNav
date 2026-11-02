@@ -2,29 +2,6 @@ import Foundation
 import Observation
 import SwiftUI
 
-enum ThemeChoice: String, CaseIterable, Identifiable {
-    case system, light, dark
-
-    var id: String { rawValue }
-
-    var label: String {
-        switch self {
-        case .system: return "System"
-        case .light: return "Light"
-        case .dark: return "Dark"
-        }
-    }
-
-    /// nil hands the decision back to iOS, which is what "System" means.
-    var colorScheme: ColorScheme? {
-        switch self {
-        case .system: return nil
-        case .light: return .light
-        case .dark: return .dark
-        }
-    }
-}
-
 /// Stored settings, mirroring the web app's so a driver moving between them
 /// finds the same switches under the same names.
 ///
@@ -33,10 +10,6 @@ enum ThemeChoice: String, CaseIterable, Identifiable {
 /// read would be the wrong shape entirely.
 @Observable
 final class Preferences {
-    var theme: ThemeChoice {
-        didSet { defaults.set(theme.rawValue, forKey: Key.theme) }
-    }
-
     /// Miles and feet instead of kilometres and metres.
     var imperial: Bool {
         didSet { defaults.set(imperial, forKey: Key.imperial) }
@@ -69,7 +42,8 @@ final class Preferences {
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
 
-        theme = ThemeChoice(rawValue: defaults.string(forKey: Key.theme) ?? "") ?? .system
+        // Appearance always follows iOS; discard the old manual override.
+        defaults.removeObject(forKey: Key.theme)
         // object(forKey:) rather than bool(forKey:): the latter returns false
         // for a key that was never written, which would silently default these
         // to off instead of to the value below.

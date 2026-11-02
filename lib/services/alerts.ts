@@ -1,14 +1,6 @@
-import { OVERPASS_MIRRORS, getEndpoints } from '@/lib/config';
+import { fetchOverpassElements } from '@/lib/services/overpass';
 import { samplePath } from '@/lib/geometry';
 import { Coordinate, RoadAlert } from '@/types/map';
-
-type OverpassElement = {
-  type: string;
-  id: number;
-  lat?: number;
-  lon?: number;
-  tags?: Record<string, string>;
-};
 
 /** Parse "30 mph", "50", "30 km/h" into km/h. */
 function parseMaxspeed(value: string | undefined): number | null {
@@ -47,42 +39,20 @@ export async function fetchSpeedCameras(
 );
 out tags 300;`;
 
-  const configured = getEndpoints().overpassUrl;
-  const endpoints = [configured, ...OVERPASS_MIRRORS.filter((mirror) => mirror !== configured)];
-
-  for (const endpoint of endpoints) {
-    const timeout = AbortSignal.timeout(12_000);
-    const combined = signal ? AbortSignal.any([signal, timeout]) : timeout;
-
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `data=${encodeURIComponent(query)}`,
-        signal: combined
-      });
-      if (!response.ok) continue;
-
-      const payload = (await response.json()) as { elements?: OverpassElement[] };
-      return (payload.elements ?? [])
-        .map((element): RoadAlert | null => {
-          if (typeof element.lat !== 'number' || typeof element.lon !== 'number') return null;
-          const tags = element.tags ?? {};
-          return {
-            id: `cam-${element.id}`,
-            kind: 'speed-camera',
-            coordinate: { lat: element.lat, lng: element.lon },
-            limitKmh: parseMaxspeed(tags.maxspeed),
-            source: 'osm'
-          };
-        })
-        .filter((value): value is RoadAlert => value !== null);
-    } catch (error) {
-      if (signal?.aborted) throw error;
-    }
-  }
-
-  return [];
+  const elements = await fetchOverpassElements(query, signal);
+  return elements
+    .map((element): RoadAlert | null => {
+      if (typeof element.lat !== 'number' || typeof element.lon !== 'number') return null;
+      const tags = element.tags ?? {};
+      return {
+        id: `cam-${element.id}`,
+        kind: 'speed-camera',
+        coordinate: { lat: element.lat, lng: element.lon },
+        limitKmh: parseMaxspeed(tags.maxspeed),
+        source: 'osm'
+      };
+    })
+    .filter((value): value is RoadAlert => value !== null);
 }
 
 /**

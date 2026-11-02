@@ -59,7 +59,7 @@ import { boundsOf, boxAround, haversineMeters, pathAhead } from '@/lib/geometry'
 import { NavIndex, NavProgress, alertAnnouncement, announcementFor, buildNavIndex, computeProgress, formatDistanceM, formatEtaClock, nextAlertAhead } from '@/lib/nav';
 import { arrivedEvent, progressEvent } from '@/lib/embed';
 import { fetchSpeedCameras, positionAlertsOnRoute } from '@/lib/services/alerts';
-import { WazeThrottled, fetchWazeTraffic } from '@/lib/services/waze';
+import { WazeServiceError, WazeThrottled, fetchWazeTraffic } from '@/lib/services/waze';
 import { reverseGeocode } from '@/lib/services/geocode';
 import { fetchChargers, fetchPlacesAlongRoute, fetchPlacesNear } from '@/lib/services/overpass';
 import { hasLocalDataKey } from '@/lib/services/localdata';
@@ -226,6 +226,11 @@ export function MapShell() {
   const [categoryLoading, setCategoryLoading] = useState<PlaceCategoryId | null>(null);
   const [selectedCharger, setSelectedCharger] = useState<ChargerSite | null>(null);
   const [chargerError, setChargerError] = useState(false);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
+  const categoryAbortRef = useRef<AbortController | null>(null);
+  const [speedLimitsUnavailable, setSpeedLimitsUnavailable] = useState(false);
+  const [camerasUnavailable, setCamerasUnavailable] = useState(false);
+  const [elevationUnavailable, setElevationUnavailable] = useState(false);
   const [chargerAttempt, setChargerAttempt] = useState(0);
 
   const [speedLimits, setSpeedLimits] = useState<SpeedLimitSpan[]>([]);
@@ -233,6 +238,8 @@ export function MapShell() {
   const [liveAlerts, setLiveAlerts] = useState<RoadAlert[]>([]);
   const [jams, setJams] = useState<TrafficJam[]>([]);
   const [trafficThrottled, setTrafficThrottled] = useState(false);
+  const [trafficUnavailable, setTrafficUnavailable] = useState(false);
+  const [weatherUnavailableFor, setWeatherUnavailableFor] = useState<string | null>(null);
   const [weather, setWeather] = useState<StopWeather | null>(null);
   /** Target arrival "HH:MM" for departure planning; null means "leaving now". */
   const [targetArrival, setTargetArrival] = useState<string | null>(null);
@@ -293,6 +300,11 @@ export function MapShell() {
   const announcedAlertsRef = useRef(new Set<string>());
 
   const destination = waypoints.length > 1 ? waypoints[waypoints.length - 1] : null;
+  const weatherRequestKey =
+    route && destination
+      ? [destination.id, targetArrival ?? 'now', route.summary.distanceKm, route.summary.durationMin].join(':')
+      : null;
+  const weatherUnavailable = weatherRequestKey !== null && weatherUnavailableFor === weatherRequestKey;
 
   /** Plus Code for the destination, computed locally — no lookup involved. */
   const destinationPlusCode = destination ? encodePlusCode(destination.coordinate) : null;
@@ -514,17 +526,42 @@ export function MapShell() {
     announcedAlertsRef.current.clear();
 
     // Both are per-route one-shots, not per-tick work.
+    setSpeedLimitsUnavailable(false);
+    setCamerasUnavailable(false);
+    setElevationUnavailable(false);
+
     fetchSpeedLimits(route.legs, options.mode, controller.signal)
-      .then(setSpeedLimits)
-      .catch(() => setSpeedLimits([]));
+      .then((spans) => {
+        setSpeedLimits(spans);
+        setSpeedLimitsUnavailable(false);
+      })
+      .catch((error: Error) => {
+        if (controller.signal.aborted || error.name === 'AbortError') return;
+        setSpeedLimits([]);
+        setSpeedLimitsUnavailable(true);
+      });
 
     fetchSpeedCameras(route.coordinates, 0.4, controller.signal)
-      .then(setCameras)
-      .catch(() => setCameras([]));
+      .then((alerts) => {
+        setCameras(alerts);
+        setCamerasUnavailable(false);
+      })
+      .catch((error: Error) => {
+        if (controller.signal.aborted || error.name === 'AbortError') return;
+        setCameras([]);
+        setCamerasUnavailable(true);
+      });
 
     fetchElevationProfile(route.coordinates, controller.signal)
-      .then(setElevation)
-      .catch(() => setElevation(null));
+      .then((profile) => {
+        setElevation(profile);
+        setElevationUnavailable(false);
+      })
+      .catch((error: Error) => {
+        if (controller.signal.aborted || error.name === 'AbortError') return;
+        setElevation(null);
+        setElevationUnavailable(true);
+      });
 
     return () => controller.abort();
     // options.mode is read above. In practice a mode change also produces a
@@ -607,6 +644,8 @@ export function MapShell() {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setLiveAlerts([]);
       setJams([]);
+      setTrafficUnavailable(false);
+      setTrafficThrottled(false);
       return;
     }
 
@@ -623,11 +662,16 @@ export function MapShell() {
         .then((traffic) => {
           setLiveAlerts(traffic.alerts);
           setJams(traffic.jams);
+          setTrafficUnavailable(false);
+          setTrafficThrottled(false);
         })
         .catch((cause: Error) => {
-          // Quota exhaustion is worth surfacing — otherwise stale traffic looks
-          // like clear roads. Other failures leave the last good data alone.
+          if (controller.signal.aborted || cause.name === 'AbortError') return;
+          // Keep the last successful traffic response: a failed refresh must
+          // never replace known reports with an authoritative-looking empty map.
           if (cause instanceof WazeThrottled) setTrafficThrottled(true);
+          else if (cause instanceof WazeServiceError) setTrafficUnavailable(true);
+          else setTrafficUnavailable(true);
         });
     };
 
@@ -946,30 +990,43 @@ export function MapShell() {
 
   const handleCategory = useCallback(
     (category: PlaceCategoryId | null, alongRoute: boolean) => {
+      categoryAbortRef.current?.abort();
       setActiveCategory(category);
+      setCategoryError(null);
       if (!category) {
         setPlaces([]);
+        setCategoryLoading(null);
         return;
       }
 
+      const controller = new AbortController();
+      categoryAbortRef.current = controller;
       setCategoryLoading(category);
       const anchor = userPosition?.coordinate ?? mapCenter;
       const request =
-        alongRoute && route ? fetchPlacesAlongRoute(category, route.coordinates, 3) : fetchPlacesNear(category, anchor, 10);
+        alongRoute && route
+          ? fetchPlacesAlongRoute(category, route.coordinates, 3, controller.signal)
+          : fetchPlacesNear(category, anchor, 10, controller.signal);
 
       request
         .then((found) => {
+          if (controller.signal.aborted) return;
           setPlaces(found);
-          if (!found.length) showToast('Nothing found nearby for that category.');
+          if (!found.length) showToast('No places were found for that category.');
         })
-        .catch(() => {
+        .catch((error: Error) => {
+          if (controller.signal.aborted || error.name === 'AbortError') return;
           setPlaces([]);
-          showToast('Place search is unavailable right now.');
+          setCategoryError('Place search is unavailable right now. Try again in a moment.');
         })
-        .finally(() => setCategoryLoading(null));
+        .finally(() => {
+          if (!controller.signal.aborted) setCategoryLoading(null);
+        });
     },
     [userPosition, mapCenter, route, showToast]
   );
+
+  useEffect(() => () => categoryAbortRef.current?.abort(), []);
 
   const handleLongPress = useCallback(
     (point: Coordinate) => {
@@ -994,6 +1051,10 @@ export function MapShell() {
    * screen so you can restart or review it, whereas this clears the plan.
    */
   function clearRoute() {
+    setWeatherUnavailableFor(null);
+    setSpeedLimitsUnavailable(false);
+    setCamerasUnavailable(false);
+    setElevationUnavailable(false);
     setNavActive(false);
     setProgress(null);
     stopSpeaking();
@@ -1351,8 +1412,15 @@ export function MapShell() {
         : Date.now() + (route.summary.durationMin + (trafficDelay?.seconds ?? 0) / 60) * 60_000;
 
     fetchWeatherAt(destination.coordinate, arrival, controller.signal)
-      .then(setWeather)
-      .catch(() => setWeather(null));
+      .then((forecast) => {
+        setWeather(forecast);
+        setWeatherUnavailableFor(null);
+      })
+      .catch((error: Error) => {
+        if (controller.signal.aborted || error.name === 'AbortError') return;
+        setWeather(null);
+        setWeatherUnavailableFor(weatherRequestKey);
+      });
 
     // Dropping the old forecast belongs here rather than in the guard above:
     // cleanup runs on the way out of every one of these dependencies, so a
@@ -1366,7 +1434,7 @@ export function MapShell() {
     // Re-fetching on every traffic tick would be wasteful; the route and the
     // planned arrival are what actually change the answer.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [route, destination?.id, targetArrival]);
+  }, [route, destination?.id, targetArrival, weatherRequestKey]);
 
   /* ------------------------------------------------ route out to the host */
   /**
@@ -1462,10 +1530,16 @@ export function MapShell() {
                   {track.length ? formatDistanceKm(trackDistanceKm(track), preferences.imperial) : 'REC'}
                 </span>
               ) : null}
+              {trafficUnavailable ? (
+                <span role="status" aria-live="polite" className="truncate text-xs text-amber-300" title="Live traffic could not be refreshed; the last successful data is retained.">Traffic unavailable</span>
+              ) : null}
               {trafficThrottled ? (
                 <span className="truncate text-xs text-amber-300" title="Live traffic quota reached; pausing requests.">
                   Traffic paused
                 </span>
+              ) : null}
+              {(speedLimitsUnavailable || camerasUnavailable) ? (
+                <span role="status" aria-live="polite" className="truncate text-xs text-amber-300" title="Some OpenStreetMap road data could not be loaded.">Road data limited</span>
               ) : null}
               {chargerError && preferences.showChargers ? (
                 <span className="truncate text-xs text-amber-300" title="Every Overpass mirror failed to respond.">
@@ -1664,6 +1738,7 @@ export function MapShell() {
               options={options}
               imperial={preferences.imperial}
               categoryLoading={categoryLoading}
+              categoryError={categoryError}
               categoryResults={places}
               activeCategory={activeCategory}
               hasRoute={Boolean(route)}
@@ -1879,7 +1954,10 @@ export function MapShell() {
                   </div>
                 </div>
 
-                {weather ? (
+                {weatherUnavailable && !weather ? (
+              <p role="status" aria-live="polite" className="rounded-xl border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-fg">Arrival weather is unavailable. Route guidance remains available without the forecast.</p>
+            ) : null}
+            {weather ? (
                   <div
                     className={cn(
                       'rounded-2xl border p-3',
@@ -1935,6 +2013,9 @@ export function MapShell() {
                           : 'This trip is beyond your current charge. Add a charging stop.'}
                       </p>
                     )}
+                    {elevationUnavailable ? (
+                      <p role="status" aria-live="polite" className="mt-2 text-xs text-amber-700 dark:text-amber-200">Elevation data is unavailable; this range estimate excludes terrain changes.</p>
+                    ) : null}
                     {elevation && Math.abs(range.climbKwh) > 0.3 ? (
                       <p className="mt-1.5 text-xs text-muted">
                         {range.climbKwh > 0 ? 'Includes' : 'Net descent recovers'}{' '}
@@ -1972,7 +2053,7 @@ export function MapShell() {
       ) : null}
 
       {toast ? (
-        <div className="pointer-events-none absolute bottom-40 left-1/2 z-50 -translate-x-1/2 rounded-full border border-line bg-raised px-4 py-2 text-sm text-fg shadow-panel backdrop-blur">
+        <div role="status" aria-live="polite" aria-atomic="true" className="pointer-events-none absolute bottom-40 left-1/2 z-50 -translate-x-1/2 rounded-full border border-line bg-raised px-4 py-2 text-sm text-fg shadow-panel backdrop-blur">
           {toast}
         </div>
       ) : null}
