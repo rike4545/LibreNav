@@ -593,7 +593,10 @@ export function NavMap({
       // effect below.
       pitch: terrain3dRef.current ? TERRAIN_RESTING_PITCH : 0,
       attributionControl: false,
-      maxPitch: 70
+      maxPitch: 70,
+      // Keep v5's overscaling behavior: v6 defaults this to 4, which can
+      // change queryRenderedFeatures results at high zoom levels.
+      zoomLevelsToOverscale: undefined
     });
     mapRef.current = map;
     appliedStyleRef.current = styleKey(styleId, styleDark);

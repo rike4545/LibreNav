@@ -24,6 +24,7 @@ test('MapLibre v6 map event callbacks retain explicit event types', async () => 
   assert.ok(source.includes("map.on('sourcedata', (event: MapSourceDataEvent)"));
   assert.ok(source.includes("map.on('touchstart', (event: MapTouchEvent)"));
   assert.ok(source.includes("map.on('contextmenu', (event: MapMouseEvent)"));
+  assert.ok(source.includes('zoomLevelsToOverscale: undefined'));
 });
 
 test('user marker ref is narrowed before its DOM element is accessed', async () => {
