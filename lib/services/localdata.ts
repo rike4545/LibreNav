@@ -105,8 +105,10 @@ export async function searchBusinesses(
   }
 
   const payload = (await response.json().catch(() => null)) as SearchEnvelope | null;
-  const hasRecords = Array.isArray(payload?.data) ||
-    Boolean(payload?.data && !Array.isArray(payload.data) && Array.isArray(payload.data.results));
+  const data = payload?.data;
+  const hasRecords =
+    Array.isArray(data) ||
+    (typeof data === 'object' && data !== null && Array.isArray((data as { results?: unknown }).results));
   if (!payload || !hasRecords || payload.error) {
     throw new LocalDataError('Business search returned an invalid response. Try again or check the service key.', 502);
   }

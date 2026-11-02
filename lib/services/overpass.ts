@@ -258,7 +258,7 @@ export async function fetchPlacesAlongRoute(
     .flatMap((filter) => [`node${filter}(around:${radius},${anchors});`, `way${filter}(around:${radius},${anchors});`])
     .join('\n  ');
 
-  const elements = await runOverpass(`[out:json][timeout:50];\n(\n  ${clauses}\n);\nout center tags 200;`, signal);
+  const elements = await fetchOverpassElements(`[out:json][timeout:50];\n(\n  ${clauses}\n);\nout center tags 200;`, signal);
   const start = { lng: path[0][0], lat: path[0][1] };
 
   return elements
