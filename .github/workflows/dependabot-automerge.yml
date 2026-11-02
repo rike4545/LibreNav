@@ -24,7 +24,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: Verify Dependabot group and commit
+      - name: Verify Dependabot group, base, and commit
         id: eligibility
         env:
           GH_TOKEN: ${{ github.token }}
@@ -40,10 +40,12 @@ jobs:
           pr="$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}")"
           author="$(jq -r '.user.login // ""' <<< "$pr")"
           base="$(jq -r '.base.ref // ""' <<< "$pr")"
+          base_sha="$(jq -r '.base.sha // ""' <<< "$pr")"
           head="$(jq -r '.head.ref // ""' <<< "$pr")"
           head_sha="$(jq -r '.head.sha // ""' <<< "$pr")"
           draft="$(jq -r '.draft // true' <<< "$pr")"
           state="$(jq -r '.state // ""' <<< "$pr")"
+          main_sha="$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq '.object.sha')"
 
           # Dependabot is configured to put only npm patch/minor updates in
           # these two groups. Major upgrades and GitHub Actions updates are
@@ -59,6 +61,11 @@ jobs:
           if [[ "$author" != "dependabot[bot]" || "$base" != "main" || "$state" != "open" || "$draft" != "false" ]]; then
             echo "Skipping PR that is not an open, non-draft Dependabot PR targeting main."
             echo "author=$author base=$base state=$state draft=$draft"
+            exit 0
+          fi
+
+          if [[ "$base_sha" != "$main_sha" ]]; then
+            echo "Skipping PR based on an outdated main commit; fresh checks are required."
             exit 0
           fi
 
@@ -133,10 +140,12 @@ jobs:
           pr="$(gh api "repos/${GH_REPO}/pulls/${PR_NUMBER}")"
           author="$(jq -r '.user.login // ""' <<< "$pr")"
           base="$(jq -r '.base.ref // ""' <<< "$pr")"
+          base_sha="$(jq -r '.base.sha // ""' <<< "$pr")"
           head="$(jq -r '.head.ref // ""' <<< "$pr")"
           head_sha="$(jq -r '.head.sha // ""' <<< "$pr")"
           draft="$(jq -r '.draft // true' <<< "$pr")"
           state="$(jq -r '.state // ""' <<< "$pr")"
+          main_sha="$(gh api "repos/${GH_REPO}/git/ref/heads/main" --jq '.object.sha')"
 
           if [[ "$author" != "dependabot[bot]" || "$base" != "main" || "$state" != "open" || "$draft" != "false" ]]; then
             echo "PR is no longer eligible; leaving it open."
@@ -150,6 +159,11 @@ jobs:
               exit 0
               ;;
           esac
+
+          if [[ "$base_sha" != "$main_sha" ]]; then
+            echo "main advanced while checks were running; leaving the PR open for fresh validation."
+            exit 0
+          fi
 
           if [[ "$head_sha" != "$CI_HEAD_SHA" ]]; then
             echo "PR head changed while checks were running; leaving it open for fresh validation."
