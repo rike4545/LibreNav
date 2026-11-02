@@ -3,6 +3,7 @@
 import { Clock, ExternalLink, Navigation, Plus, X, Zap } from 'lucide-react';
 import { bearingCompass } from '@/lib/format';
 import { cn } from '@/lib/utils';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 import { ChargerSite, Coordinate } from '@/types/map';
 
 type Props = {
@@ -16,11 +17,12 @@ type Props = {
 };
 
 export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, onAddStop, onClose }: Props) {
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
   const power = charger.powerKw;
   const tier = power === null ? 'unknown' : power >= 150 ? 'ultra' : power >= 50 ? 'fast' : 'slow';
 
   return (
-    <div className="w-[min(24rem,calc(var(--safe-w)-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="charger-card-title" tabIndex={-1} className="w-[min(24rem,calc(var(--safe-w)-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
@@ -30,7 +32,7 @@ export function ChargerCard({ charger, from, imperial, canAddStop, onNavigate, o
                 tier === 'ultra' ? 'text-cyan-300' : tier === 'fast' ? 'text-emerald-300' : 'text-lime-300'
               )}
             />
-            <h3 className="truncate text-base font-semibold text-fg">{charger.name}</h3>
+            <h3 id="charger-card-title" className="truncate text-base font-semibold text-fg">{charger.name}</h3>
           </div>
           <p className="mt-0.5 truncate text-xs text-subtle">
             {charger.network}

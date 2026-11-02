@@ -64,6 +64,24 @@ body {
   box-sizing: border-box;
 }
 
+/* Keep keyboard focus visible, including on controls with custom borders. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid rgb(var(--accent-fg));
+  outline-offset: 3px;
+}
+
+/* Respect the operating system's reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
 /*
  * iOS safe areas.
  *

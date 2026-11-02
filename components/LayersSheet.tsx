@@ -1,10 +1,11 @@
 'use client';
 
-import { ReactNode, useEffect } from 'react';
+import { ReactNode } from 'react';
 import { AlertTriangle, Check, KeyRound, Mountain, TrafficCone, X, Zap } from 'lucide-react';
 import { MapStyleOption, StylePreview } from '@/lib/config';
 import { Preferences } from '@/lib/storage';
 import { cn } from '@/lib/utils';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 
 type Props = {
   styles: MapStyleOption[];
@@ -134,15 +135,7 @@ export function LayersSheet({
     }
   ];
 
-  // Escape closes it, the same as the backdrop. A sheet that can only be
-  // dismissed by aiming at a small X is a sheet people leave open.
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
 
   return (
     <>
@@ -155,9 +148,11 @@ export function LayersSheet({
 
       <div className="safe-bottom safe-x absolute inset-x-0 bottom-0 z-50">
         <div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-label="Layers"
+          tabIndex={-1}
           className="sheet-max mx-auto w-[min(60rem,100%)] rounded-[1.75rem] border border-line bg-surface shadow-panel"
         >
           <div className="flex items-center justify-between gap-3 px-4 pb-3 pt-4">

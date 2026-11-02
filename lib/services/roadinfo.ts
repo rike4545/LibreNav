@@ -53,14 +53,13 @@ export async function fetchSpeedLimits(
         signal
       });
     } catch (error) {
-      if ((error as Error).name === 'AbortError') throw error;
-      // Speed limits are an enhancement; a failure shouldn't break navigation.
-      return spans;
+      if (signal?.aborted || (error as Error).name === 'AbortError') throw error;
+      throw new Error('Posted speed-limit data is temporarily unavailable.');
     }
 
-    if (!response.ok) return spans;
+    if (!response.ok) throw new Error(`Posted speed-limit service returned HTTP ${response.status}.`);
     const payload = (await response.json().catch(() => null)) as TraceResponse | null;
-    if (!payload?.edges) return spans;
+    if (!payload?.edges || payload.error) throw new Error('Posted speed-limit service returned an incomplete response.');
 
     for (const edge of payload.edges) {
       const begin = edge.begin_shape_index;

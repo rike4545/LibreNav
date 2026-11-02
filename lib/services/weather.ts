@@ -116,12 +116,18 @@ export async function fetchWeatherAt(
   // Two days covers any trip this app plans for.
   url.searchParams.set('forecast_days', '2');
 
-  const response = await fetch(url, { signal }).catch(() => null);
-  if (!response?.ok) return null;
+  let response: Response;
+  try {
+    response = await fetch(url, { signal });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error('Arrival weather is temporarily unavailable.');
+  }
+  if (!response.ok) throw new Error(`Weather service returned HTTP ${response.status}.`);
 
   const payload = (await response.json().catch(() => null)) as Forecast | null;
   const hourly = payload?.hourly;
-  if (!hourly?.time?.length) return null;
+  if (!hourly?.time?.length) throw new Error('Weather service returned an incomplete forecast.');
 
   // Times come back as unix seconds; pick the closest hour to arrival.
   const targetSeconds = arrivalMs / 1000;
@@ -174,8 +180,14 @@ async function fetchAirQuality(
   url.searchParams.set('timezone', 'UTC');
   url.searchParams.set('forecast_days', '2');
 
-  const response = await fetch(url, { signal }).catch(() => null);
-  if (!response?.ok) return { aqi: null, pm25: null };
+  let response: Response;
+  try {
+    response = await fetch(url, { signal });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    return { aqi: null, pm25: null };
+  }
+  if (!response.ok) return { aqi: null, pm25: null };
 
   const payload = (await response.json().catch(() => null)) as {
     hourly?: { time?: number[]; us_aqi?: (number | null)[]; pm2_5?: (number | null)[] };

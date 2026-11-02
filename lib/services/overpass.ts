@@ -2,7 +2,7 @@ import { OVERPASS_MIRRORS, getEndpoints } from '@/lib/config';
 import { haversineMeters, samplePath } from '@/lib/geometry';
 import { ChargerSite, Coordinate, Place, PlaceCategoryId } from '@/types/map';
 
-type OverpassElement = {
+export type OverpassElement = {
   type: string;
   id: number;
   lat?: number;
@@ -25,7 +25,7 @@ type OverpassPayload = { elements?: OverpassElement[] };
  */
 const MIRROR_TIMEOUT_MS = 12_000;
 
-async function runOverpass(query: string, signal?: AbortSignal): Promise<OverpassElement[]> {
+export async function fetchOverpassElements(query: string, signal?: AbortSignal): Promise<OverpassElement[]> {
   const configured = getEndpoints().overpassUrl;
   const endpoints = [configured, ...OVERPASS_MIRRORS.filter((mirror) => mirror !== configured)];
   let lastError: Error | null = null;
@@ -49,8 +49,12 @@ async function runOverpass(query: string, signal?: AbortSignal): Promise<Overpas
         continue;
       }
 
-      const payload = (await response.json()) as OverpassPayload;
-      return payload.elements ?? [];
+      const payload = (await response.json().catch(() => null)) as OverpassPayload | null;
+      if (!payload || !Array.isArray(payload.elements)) {
+        lastError = new Error('Overpass returned an invalid response.');
+        continue;
+      }
+      return payload.elements;
     } catch (error) {
       // Only the caller cancelling should stop the chain; a timeout moves on.
       if (signal?.aborted) throw error;
@@ -58,7 +62,8 @@ async function runOverpass(query: string, signal?: AbortSignal): Promise<Overpas
     }
   }
 
-  throw lastError ?? new Error('All Overpass mirrors failed.');
+  if (signal?.aborted) throw signal.reason ?? lastError;
+  throw new Error('Place data services are temporarily unavailable. Please try again shortly.');
 }
 
 function pointOf(element: OverpassElement): Coordinate | null {
@@ -138,7 +143,7 @@ export async function fetchChargers(
 );
 out center tags 200;`;
 
-  const elements = await runOverpass(query, signal);
+  const elements = await fetchOverpassElements(query, signal);
 
   return elements
     .map((element): ChargerSite | null => {
@@ -219,7 +224,7 @@ export async function fetchPlacesNear(
     .flatMap((filter) => [`node${filter}(around:${radius},${anchor});`, `way${filter}(around:${radius},${anchor});`])
     .join('\n  ');
 
-  const elements = await runOverpass(`[out:json][timeout:25];\n(\n  ${clauses}\n);\nout center tags 120;`, signal);
+  const elements = await fetchOverpassElements(`[out:json][timeout:25];\n(\n  ${clauses}\n);\nout center tags 120;`, signal);
 
   return elements
     .map((element) => toPlace(element, category))
@@ -253,7 +258,7 @@ export async function fetchPlacesAlongRoute(
     .flatMap((filter) => [`node${filter}(around:${radius},${anchors});`, `way${filter}(around:${radius},${anchors});`])
     .join('\n  ');
 
-  const elements = await runOverpass(`[out:json][timeout:50];\n(\n  ${clauses}\n);\nout center tags 200;`, signal);
+  const elements = await fetchOverpassElements(`[out:json][timeout:50];\n(\n  ${clauses}\n);\nout center tags 200;`, signal);
   const start = { lng: path[0][0], lat: path[0][1] };
 
   return elements
