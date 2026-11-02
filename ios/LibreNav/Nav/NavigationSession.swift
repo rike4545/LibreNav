@@ -42,6 +42,8 @@ final class NavigationSession {
     private var announced: Set<String> = []
     /// Consecutive off-route fixes. One bad fix is not a wrong turn.
     private var offRouteRuns = 0
+    private var stops: [NavigationStop] = []
+    private var completedStopIDs: Set<String> = []
 
     private let voice = Voice()
 
@@ -56,8 +58,10 @@ final class NavigationSession {
     var onNeedsReroute: (() -> Void)?
     var onIntermediateStopArrived: ((String) -> Void)?
 
-    func start(route: Route, imperial: Bool) {
+    func start(route: Route, stops: [NavigationStop] = [], imperial: Bool) {
         self.route = route
+        self.stops = stops
+        completedStopIDs.removeAll()
         self.imperial = imperial
 
         cumulative = RouteGeometry.cumulativeDistances(route.coordinates)
