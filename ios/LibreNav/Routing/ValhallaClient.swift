@@ -76,6 +76,32 @@ struct ValhallaClient {
         return parsed
     }
 
+    func optimizedOrder(stops: [CLLocationCoordinate2D], mode: TravelMode) async throws -> [Int] {
+        guard stops.count >= 4 else { return Array(stops.indices) }
+        guard mode == .auto || mode == .bicycle || mode == .pedestrian else {
+            throw RoutingError.service("Stop optimization is available for driving, cycling, and walking.")
+        }
+        let locations: [[String: Double]] = stops.map { ["lat": $0.latitude, "lon": $0.longitude] }
+        let body: [String: Any] = ["locations": locations, "costing": mode.rawValue, "units": "kilometers"]
+        var request = URLRequest(url: baseURL.appendingPathComponent("optimized_route"))
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let data: Data
+        let response: URLResponse
+        do { (data, response) = try await session.data(for: request) }
+        catch { if Task.isCancelled { throw CancellationError() }; throw RoutingError.unreachable }
+        let json = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        if let message = json?["error"] as? String { throw RoutingError.service(message) }
+        guard (200..<300).contains(status), let json else { throw RoutingError.service("Stop optimization failed (HTTP \(status)).") }
+        guard let raw = json["locations"] as? [[String: Any]] else { throw RoutingError.service("The optimization service returned an incomplete stop order.") }
+        let indexes = raw.compactMap { $0["original_index"] as? Int }
+        guard indexes.count == stops.count, Set(indexes).count == stops.count, indexes.first == 0, indexes.last == stops.count - 1, indexes.allSatisfy({ $0 >= 0 && $0 < stops.count }) else {
+            throw RoutingError.service("The optimization service returned an invalid stop order.")
+        }
+        return indexes
+    }
     /// A Valhalla trip is a list of legs; the shape and maneuvers concatenate,
     /// with maneuver shape indices rebased onto the joined line.
     static func parse(trip: [String: Any]) -> Route? {
