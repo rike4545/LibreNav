@@ -35,27 +35,33 @@ export async function fetchElevationProfile(
 
   const { valhallaUrl } = getEndpoints();
 
-  const response = await fetch(`${valhallaUrl.replace(/\/+$/, '')}/height`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      range: true,
-      shape: sampled.map((point) => ({ lat: point.lat, lon: point.lng }))
-    }),
-    signal
-  }).catch(() => null);
-
-  if (!response?.ok) return null;
+  let response: Response;
+  try {
+    response = await fetch(`${valhallaUrl.replace(/\/+$/, '')}/height`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        range: true,
+        shape: sampled.map((point) => ({ lat: point.lat, lon: point.lng }))
+      }),
+      signal
+    });
+  } catch (error) {
+    if (signal?.aborted) throw error;
+    throw new Error('Elevation data is temporarily unavailable.');
+  }
+  if (!response.ok) throw new Error(`Elevation service returned HTTP ${response.status}.`);
 
   const payload = (await response.json().catch(() => null)) as { range_height?: Array<[number, number]> } | null;
   const raw = payload?.range_height;
-  if (!Array.isArray(raw) || raw.length < 2) return null;
+  if (!Array.isArray(raw) || raw.length < 2) throw new Error('Elevation service returned an incomplete profile.');
 
   const points = raw.filter(
     (pair): pair is [number, number] =>
-      Array.isArray(pair) && typeof pair[0] === 'number' && typeof pair[1] === 'number'
+      Array.isArray(pair) && typeof pair[0] === 'number' && Number.isFinite(pair[0]) &&
+      typeof pair[1] === 'number' && Number.isFinite(pair[1])
   );
-  if (points.length < 2) return null;
+  if (points.length < 2) throw new Error('Elevation service returned an incomplete profile.');
 
   let ascentM = 0;
   let descentM = 0;
