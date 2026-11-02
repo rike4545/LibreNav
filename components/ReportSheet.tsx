@@ -2,6 +2,7 @@
 
 import { AlertTriangle, Camera, Car, Construction, ShieldAlert, TrafficCone, X } from 'lucide-react';
 import { HazardKind } from '@/types/map';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 
 type Props = {
   onReport: (kind: HazardKind) => void;
@@ -18,10 +19,11 @@ const KINDS: Array<{ kind: HazardKind; label: string; icon: typeof Camera; tone:
 ];
 
 export function ReportSheet({ onReport, onClose }: Props) {
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
   return (
-    <div className="w-[min(24rem,calc(var(--safe-w)-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="report-sheet-title" tabIndex={-1} className="w-[min(24rem,calc(var(--safe-w)-2rem))] rounded-3xl border border-line bg-surface p-4 shadow-panel">
       <div className="flex items-center justify-between">
-        <h2 className="text-base font-semibold text-fg">Report at your location</h2>
+        <h2 id="report-sheet-title" className="text-base font-semibold text-fg">Report at your location</h2>
         <button
           type="button"
           onClick={onClose}

@@ -8,6 +8,7 @@ import { CONNECTOR_OPTIONS } from '@/lib/services/overpass';
 import { Preferences, TripRecord } from '@/lib/storage';
 import { VoiceSettings, getServerVoicesSnapshot, getVoicesSnapshot, onVoicesChanged, previewVoice, speechSupported } from '@/lib/voice';
 import { cn } from '@/lib/utils';
+import { useDialogFocus } from '@/lib/useDialogFocus';
 import { VehicleProfile } from '@/types/map';
 
 type Props = {
@@ -43,6 +44,7 @@ export function SettingsPanel({
   // as state seeded in an effect — which also drops the extra render that the
   // seeding pass used to cost on open.
   const voices = useSyncExternalStore(onVoicesChanged, getVoicesSnapshot, getServerVoicesSnapshot);
+  const dialogRef = useDialogFocus<HTMLDivElement>(onClose);
 
   const [endpoints, setEndpoints] = useState<Endpoints>(() => getEndpoints());
   const [saved, setSaved] = useState(false);
@@ -101,9 +103,9 @@ export function SettingsPanel({
   // panel; without it the panel sizes to the whole safe area and loses its
   // header and its last row off the ends of a landscape screen.
   return (
-    <div className="flex max-h-[min(44rem,calc(var(--safe-h)-2rem))] w-[min(30rem,calc(var(--safe-w)-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-panel">
+    <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="settings-panel-title" tabIndex={-1} className="flex max-h-[min(44rem,calc(var(--safe-h)-2rem))] w-[min(30rem,calc(var(--safe-w)-2rem))] flex-col overflow-hidden rounded-3xl border border-line bg-surface shadow-panel">
       <header className="flex items-center justify-between border-b border-line px-5 py-4">
-        <h2 className="text-lg font-semibold text-fg">Settings</h2>
+        <h2 id="settings-panel-title" className="text-lg font-semibold text-fg">Settings</h2>
         <button type="button" onClick={onClose} aria-label="Close settings" className="rounded-full p-1.5 text-subtle hover:bg-strong hover:text-fg">
           <X className="h-5 w-5" />
         </button>
