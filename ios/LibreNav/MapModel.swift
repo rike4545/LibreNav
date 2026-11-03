@@ -23,11 +23,13 @@ final class MapModel {
     private(set) var results: [Place] = []
     private(set) var isSearching = false
 
-    var destination: Place?
+    private(set) var waypoints: [Place] = []
+    var destination: Place? { waypoints.last }
     private(set) var route: Route? {
         didSet { routeToken += 1 }
     }
     private(set) var isRouting = false
+    private(set) var isOptimizingTrip = false
     private(set) var errorMessage: String?
 
     var mode: TravelMode = .auto {
@@ -64,10 +66,15 @@ final class MapModel {
     /// The last fix fed to the session, so a reroute starts from where the
     /// driver actually is rather than where the trip began.
     private var lastFix: CLLocationCoordinate2D?
+    private var completedWaypointIDs: Set<String> = []
 
     init() {
         nav.onNeedsReroute = { [weak self] in
             self?.reroute()
+        }
+        nav.onIntermediateStopArrived = { [weak self] id in
+            guard let self else { return }
+            self.completedWaypointIDs.insert(id)
         }
         location.onFix = { [weak self] coordinate, accuracy in
             self?.handleFix(coordinate, accuracy: accuracy)
@@ -88,16 +95,56 @@ final class MapModel {
     }
 
     func select(_ place: Place) {
-        destination = place
+        completedWaypointIDs.removeAll()
+        waypoints = [place]
         query = ""
         results = []
         requestRoute()
     }
 
+    func addStop(_ place: Place) {
+        guard !waypoints.isEmpty else { select(place); return }
+        guard !waypoints.contains(where: { $0.id == place.id }) else { return }
+        waypoints.insert(place, at: max(0, waypoints.count - 1))
+        query = ""
+        results = []
+        requestRoute()
+    }
+
+    func removeStop(_ id: String) {
+        waypoints.removeAll { $0.id == id }
+        if waypoints.isEmpty { clearRoute() } else { requestRoute() }
+    }
+
+    func moveStop(_ id: String, by offset: Int) {
+        guard let index = waypoints.firstIndex(where: { $0.id == id }) else { return }
+        let target = index + offset
+        guard index > 0, index < waypoints.count - 1, target > 0, target < waypoints.count - 1 else { return }
+        waypoints.swapAt(index, target)
+        requestRoute()
+    }
+
+    func optimizeStops() async {
+        guard waypoints.count >= 3, !isOptimizingTrip else { return }
+        isOptimizingTrip = true
+        defer { isOptimizingTrip = false }
+        do {
+            let stops = [origin] + waypoints.map { $0.coordinate }
+            let order = try await router.optimizedOrder(stops: stops, mode: mode)
+            guard !Task.isCancelled else { return }
+            waypoints = order.dropFirst().map { waypoints[$0 - 1] }
+            requestRoute()
+        } catch is CancellationError {
+            return
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
     func clearRoute() {
         routeTask?.cancel()
         stopNavigating()
-        destination = nil
+        waypoints = []
+        completedWaypointIDs.removeAll()
         route = nil
         errorMessage = nil
     }
@@ -118,7 +165,8 @@ final class MapModel {
             return
         }
         location.isNavigating = true
-        nav.start(route: route, imperial: preferences.imperial)
+        completedWaypointIDs.removeAll()
+        nav.start(route: route, stops: waypoints.map { NavigationStop(id: $0.id, name: $0.name, coordinate: $0.coordinate) }, imperial: preferences.imperial)
     }
 
     func stopNavigating() {
@@ -148,10 +196,11 @@ final class MapModel {
         routeTask = Task { [weak self] in
             guard let self else { return }
             do {
-                let fresh = try await self.router.route(stops: [from, destination.coordinate], mode: self.mode)
+                let remaining = self.waypoints.filter { !self.completedWaypointIDs.contains($0.id) }
+                let fresh = try await self.router.route(stops: [from] + remaining.map { $0.coordinate }, mode: self.mode)
                 guard !Task.isCancelled else { return }
                 self.route = fresh
-                self.nav.start(route: fresh, imperial: self.preferences.imperial)
+                self.nav.start(route: fresh, stops: remaining.map { NavigationStop(id: $0.id, name: $0.name, coordinate: $0.coordinate) }, imperial: self.preferences.imperial)
             } catch {
                 // Keep guiding on the old line rather than dropping the driver
                 // mid-trip; the next off-route run will try again.
@@ -248,7 +297,7 @@ final class MapModel {
         routeTask?.cancel()
         errorMessage = nil
 
-        let stops = [origin, destination.coordinate]
+        let stops = [origin] + waypoints.map { $0.coordinate }
         let mode = mode
 
         routeTask = Task { [weak self] in

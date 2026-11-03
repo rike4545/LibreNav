@@ -42,6 +42,8 @@ final class NavigationSession {
     private var announced: Set<String> = []
     /// Consecutive off-route fixes. One bad fix is not a wrong turn.
     private var offRouteRuns = 0
+    private var stops: [NavigationStop] = []
+    private var completedStopIDs: Set<String> = []
 
     private let voice = Voice()
 
@@ -54,9 +56,12 @@ final class NavigationSession {
 
     /// Called when the driver has been off-route long enough to mean it.
     var onNeedsReroute: (() -> Void)?
+    var onIntermediateStopArrived: ((String) -> Void)?
 
-    func start(route: Route, imperial: Bool) {
+    func start(route: Route, stops: [NavigationStop] = [], imperial: Bool) {
         self.route = route
+        self.stops = stops
+        completedStopIDs.removeAll()
         self.imperial = imperial
 
         cumulative = RouteGeometry.cumulativeDistances(route.coordinates)
@@ -134,6 +139,17 @@ final class NavigationSession {
             shapeIndex: snap.index
         )
 
+        for index in 0..<max(0, stops.count - 1) {
+            let stop = stops[index]
+            let boundaryIndex = index + 1
+            guard boundaryIndex < route.legStartShapeIndices.count,
+                  snap.index >= route.legStartShapeIndices[boundaryIndex],
+                  RouteGeometry.distance(coordinate, stop.coordinate) <= arrivalMetres * 2,
+                  !completedStopIDs.contains(stop.id) else { continue }
+            completedStopIDs.insert(stop.id)
+            voice.say("Arrived at " + stop.name + ". Continue to " + stops[index + 1].name + ".")
+            onIntermediateStopArrived?(stop.id)
+        }
         if remaining <= arrivalMetres, !hasArrived {
             hasArrived = true
             voice.say("You have arrived.")

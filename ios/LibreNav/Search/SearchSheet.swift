@@ -99,6 +99,18 @@ struct SearchSheet: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    if model.destination != nil {
+                        Button {
+                            searchFocused = false
+                            model.addStop(place)
+                        } label: {
+                            Label("Add stop", systemImage: "plus.circle")
+                                .font(.caption.weight(.semibold))
+                                .padding(.leading, 48)
+                                .padding(.bottom, 8)
+                        }
+                        .buttonStyle(.plain)
+                    }
                     Divider().padding(.leading, 48)
                 }
             }
@@ -124,6 +136,38 @@ struct SearchSheet: View {
                     .font(.subheadline.weight(.medium))
             }
 
+            if model.waypoints.count > 1 {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(model.waypoints) { stop in
+                        let index = model.waypoints.firstIndex(where: { $0.id == stop.id }) ?? 0
+                        HStack(spacing: 8) {
+                            Image(systemName: index == model.waypoints.count - 1 ? "flag.checkered" : "mappin.circle.fill")
+                                .foregroundStyle(index == model.waypoints.count - 1 ? .blue : .orange)
+                            Text(stop.name).font(.subheadline).lineLimit(1)
+                            Spacer(minLength: 4)
+                            Button { model.moveStop(stop.id, by: -1) } label: { Image(systemName: "chevron.up") }
+                                .disabled(index == 0 || index == model.waypoints.count - 1)
+                                .accessibilityLabel("Move " + stop.name + " earlier")
+                            Button { model.moveStop(stop.id, by: 1) } label: { Image(systemName: "chevron.down") }
+                                .disabled(index == 0 || index == model.waypoints.count - 1)
+                                .accessibilityLabel("Move " + stop.name + " later")
+                            Button(role: .destructive) { model.removeStop(stop.id) } label: { Image(systemName: "xmark.circle") }
+                                .accessibilityLabel("Remove " + stop.name)
+                        }
+                        .font(.caption)
+                    }
+                }
+            }
+            if model.waypoints.count >= 3 {
+                Button { Task { await model.optimizeStops() } } label: {
+                    Label(model.isOptimizingTrip ? "Optimizing stop order…" : "Optimize stop order", systemImage: "arrow.triangle.2.circlepath")
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 10)
+                }
+                .buttonStyle(.bordered)
+                .disabled(model.isOptimizingTrip || model.mode == .truck)
+            }
             Button {
                 model.startNavigating()
             } label: {

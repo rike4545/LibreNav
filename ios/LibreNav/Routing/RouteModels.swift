@@ -80,10 +80,17 @@ struct RouteSummary {
     let hasFerry: Bool
 }
 
+struct NavigationStop {
+    let id: String
+    let name: String
+    let coordinate: CLLocationCoordinate2D
+}
+
 struct Route {
     let coordinates: [CLLocationCoordinate2D]
     let maneuvers: [Maneuver]
     let summary: RouteSummary
+    let legStartShapeIndices: [Int]
 }
 
 enum TravelMode: String, CaseIterable, Identifiable {
